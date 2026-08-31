@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>LexCalc embed test</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #f0f7f0; color: #16371f;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px; box-sizing: border-box;
+  }
+  .card {
+    background: #fff; border: 2px solid #2e7d32; border-radius: 14px;
+    max-width: 560px; width: 100%; padding: 32px 34px;
+    box-shadow: 0 6px 22px rgba(0,0,0,.08); text-align: center;
+  }
+  .check { font-size: 52px; line-height: 1; }
+  h1 { font-size: 22px; margin: 12px 0 6px; }
+  p { font-size: 15px; line-height: 1.55; color: #33503b; margin: 8px 0; }
+  .row {
+    margin-top: 20px; padding-top: 16px; border-top: 1px solid #dbe7dd;
+    font-size: 13px; color: #5a6b5f; display: flex; flex-direction: column; gap: 4px;
+  }
+  code { background: #eef3ee; padding: 1px 6px; border-radius: 4px; }
+  .muted { color: #8a988e; font-size: 12px; margin-top: 18px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="check">✅</div>
+    <h1>Embedding works.</h1>
+    <p>If you can read this <strong>inside your SharePoint page</strong>, then
+       SharePoint is allowed to show an outside web page — which is exactly what
+       the LexCalc calculator needs.</p>
+    <div class="row">
+      <div id="frameLine">Checking where this is running…</div>
+      <div id="timeLine"></div>
+    </div>
+    <p class="muted">This is a throwaway test page. It contains none of the
+       LexCalc calculator or its code.</p>
+  </div>
+
+<script>
+  // Purely informational: confirms the page is live (timestamp) and whether it
+  // is running inside a frame (as it will be inside SharePoint).
+  try {
+    var framed = (window.parent !== window);
+    document.getElementById('frameLine').innerHTML =
+      framed
+        ? 'Running <strong>inside a frame</strong> ✓ (this is how SharePoint will show it)'
+        : 'Running as a standalone page (open it inside SharePoint to see the framed message).';
+  } catch (e) {
+    document.getElementById('frameLine').textContent = 'Running inside a frame ✓';
+  }
+  document.getElementById('timeLine').textContent =
+    'Page loaded at: ' + new Date().toLocaleString();
+</script>
+</body>
+</html>
