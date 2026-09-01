@@ -1811,20 +1811,9 @@ td.hl { color:var(--rich-black); font-weight:500; }
     if (d.ok) p.resolve(d.result); else p.reject(new Error(d.error || 'engine error'));
   });
 
-  // report content height so the host can size the iframe (no inner scrollbar)
-  function reportHeight() {
-    try {
-      var h = Math.max(document.documentElement ? document.documentElement.scrollHeight : 0,
-                       document.body ? document.body.scrollHeight : 0);
-      if (h) { window.parent.postMessage({ type: 'lexcalc:height', height: h }, '*'); }
-    } catch (e) { /* ignore */ }
-  }
-  if (document.readyState === 'complete') { reportHeight(); }
-  else { window.addEventListener('load', reportHeight); }
-  try {
-    var ro = new ResizeObserver(function () { reportHeight(); });
-    window.addEventListener('load', function () { if (document.body) { ro.observe(document.body); } });
-  } catch (e) { /* ResizeObserver unsupported — host keeps a default height */ }
+  // The host frames this UI at a fixed, screen-sized height and the app scrolls
+  // inside — so we do NOT auto-report height (that loops with min-height:100vh
+  // and misplaces position:fixed modals).
 })();
 </script>
 <script>
