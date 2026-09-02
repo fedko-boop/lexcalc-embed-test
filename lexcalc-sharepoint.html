@@ -1723,8 +1723,6 @@ td.hl { color:var(--rich-black); font-weight:500; }
   </div>
 </div>
 
-<script src="lexcalc-worktrip-engine.js"></script>
-<script src="lexcalc-fees-engine.js"></script>
 <script src="lexcalc-import-engine.js"></script>
 <!-- Local, offline third-party libraries for invoice import (no CDN, no network). See vendor/README.md -->
 <script src="vendor/xlsx.full.min.js"></script>
@@ -1791,16 +1789,35 @@ td.hl { color:var(--rich-black); font-weight:500; }
   }
   window.LexCalcEngine = { toDailyRate: toDailyRate, buildEffectiveCosts: buildEffectiveCosts, buildSnapshot: buildSnapshot };
 
-  // --- server-calc bridge: ask the host to run the interest engine ---
+  // Work-trip cost-item packaging (Stage 2). The work-trip MATH runs on the
+  // server; this is only the non-secret step that turns a computed trip-day into
+  // a claim cost line, so it stays client-side (copied verbatim from
+  // lexcalc-worktrip-engine.js toCostItem). No algorithm here.
+  function wtToCostItem(output, opts) {
+    opts = opts || {};
+    var label = output.jurisdiction === 'CZ' ? 'Cestovní náhrady' : 'Cestovné náhrady';
+    return {
+      id: opts.id || ('trip-' + (output.date || 'na')),
+      desc: opts.desc || (label + (output.date ? ' (' + output.date + ')' : '')),
+      amount: output.total,
+      date: opts.date || output.date,
+      scope: opts.scope || 'all',
+    };
+  }
+  window.WorkTripEngine = { toCostItem: wtToCostItem };
+
+  // --- server-calc bridge: ask the host to run a server engine ---
+  // engine: 'interest' (main claim calc) or 'coordinator' (interest + work-trip
+  // + fees in one pass). Defaults to 'interest' for backward compatibility.
   var seq = 0, pending = {};
-  window.spCalculate = function (input) {
+  window.spCalculate = function (input, engine) {
     return new Promise(function (resolve, reject) {
       var reqId = ++seq;
       pending[reqId] = { resolve: resolve, reject: reject };
       window.setTimeout(function () {
         if (pending[reqId]) { delete pending[reqId]; reject(new Error('engine did not respond')); }
       }, 20000);
-      try { window.parent.postMessage({ type: 'lexcalc:calculate', reqId: reqId, input: input }, '*'); }
+      try { window.parent.postMessage({ type: 'lexcalc:calculate', reqId: reqId, engine: engine || 'interest', input: input }, '*'); }
       catch (e) { delete pending[reqId]; reject(e); }
     });
   };
@@ -3888,13 +3905,43 @@ function wtDayRoutes() {
   const days = wtDays.length ? wtDays : [{ legs: [wtNewLeg()] }];
   return days.map(d => wtRouteLabel(d.legs));
 }
-function computeWorktrip() {
-  if (typeof WorkTripEngine === 'undefined') return;
+// --- Stage 2: work-trip + fees computed on the server (coordinator) ---
+// A minimal interest stub carries the settings the coordinator needs (as-of
+// date + jurisdiction drive the SK režijný paušál year and the trip/fee dates)
+// without shipping the whole claim on every panel edit.
+function spMinimalInterest() {
+  return {
+    settings: { asOfDate: uiAsOf(), jurisdiction: uiJur(), currency: uiCurrency() },
+    invoices: [], payments: [], courtCosts: [], penalties: [],
+  };
+}
+// Reshape the coordinator's per-trip outputs into the { days, grandTotal,
+// warnings } shape the work-trip panel renders (was WorkTripEngine.calculateMany).
+function reshapeTrips(r) {
+  const days = (r && r.trips) || [];
+  const warnings = [];
+  days.forEach(function (d) { (d.warnings || []).forEach(function (w) { if (warnings.indexOf(w) === -1) warnings.push(w); }); });
+  return { days: days, grandTotal: days.reduce(function (s, d) { return s + (d.total || 0); }, 0), warnings: warnings };
+}
+async function spWorktripMany(inputs) {
+  const r = await spCalculate({ interest: spMinimalInterest(), trips: inputs }, 'coordinator');
+  return reshapeTrips(r);
+}
+async function spCalcAttorneyFee(input) {
+  const r = await spCalculate({ interest: spMinimalInterest(), fees: { attorney: input } }, 'coordinator');
+  return r.attorney;
+}
+async function spCalcCourtFee(input) {
+  const r = await spCalculate({ interest: spMinimalInterest(), fees: { court: input } }, 'coordinator');
+  return r.court;
+}
+async function computeWorktrip() {
+  if (typeof spCalculate !== 'function') return;
   syncWtFuelOptions();
   const type = document.getElementById('wtVehicle').value;
   document.getElementById('wtCarRow').style.display = (type === 'vlastne' || type === 'firemne') ? '' : 'none';
   document.getElementById('wtTicketRow').style.display = (type === 'vlak' || type === 'autobus' || type === 'lietadlo') ? '' : 'none';
-  const o = WorkTripEngine.calculateMany(wtBuildInputs());
+  const o = await spWorktripMany(wtBuildInputs());
   wtLastOutput = o;
   const routes = wtDayRoutes();
   const cur = uiCurrency();
@@ -3908,8 +3955,8 @@ function computeWorktrip() {
   ).join('<br>');
   document.getElementById('wtWarn').innerHTML = (o.warnings || []).map(escapeHtml).join('<br>');
 }
-function pushWorktripCost() {
-  if (!wtLastOutput) computeWorktrip();
+async function pushWorktripCost() {
+  if (!wtLastOutput) await computeWorktrip();
   const o = wtLastOutput;
   const routes = wtDayRoutes();
   if (!(o.grandTotal > 0)) { alert(t('pushZero')); return; }
@@ -3976,11 +4023,11 @@ function feeActsInput() {
   if (!feeActsList.length) return [{ date: uiAsOf(), count: 1, multiplier: 1 }];
   return feeActsList.map(a => ({ date: a.date || uiAsOf(), desc: a.desc || null, count: a.count, multiplier: a.multiplier != null ? a.multiplier : 1 }));
 }
-function computeFees() {
-  if (typeof LexCalcFeesEngine === 'undefined') return;
+async function computeFees() {
+  if (typeof spCalculate !== 'function') return;
   const jur = uiJur(), cur = uiCurrency();
   const flatRaw = document.getElementById('feeFlat').value;
-  const att = LexCalcFeesEngine.calcAttorneyFee({
+  const att = await spCalcAttorneyFee({
     jurisdiction: jur, currency: cur,
     tariffBase: feeBaseOrPrincipal('feeAttBase'),
     acts: feeActsInput(),
@@ -4002,7 +4049,7 @@ function computeFees() {
 
   document.getElementById('courtUpominacieRow').style.display = jur === 'SK' ? '' : 'none';
   document.getElementById('courtConsumerRow').style.display = jur === 'SK' ? '' : 'none';
-  const court = LexCalcFeesEngine.calcCourtFee({
+  const court = await spCalcCourtFee({
     jurisdiction: jur, currency: cur,
     base: feeBaseOrPrincipal('courtBase'),
     commercial: document.getElementById('courtCommercial').checked,
@@ -4014,8 +4061,8 @@ function computeFees() {
   document.getElementById('courtOutTotal').textContent = fmtNum(court.total, cur) + ' · ' + escapeHtml(court.note || '');
   document.getElementById('courtWarn').innerHTML = (court.warnings || []).map(escapeHtml).join('<br>');
 }
-function pushAttorneyCost() {
-  if (!feeAttLast) computeFees();
+async function pushAttorneyCost() {
+  if (!feeAttLast) await computeFees();
   const att = feeAttLast;
   const total = Math.round((att.total || 0) * 100) / 100;
   if (!(total > 0)) { alert(t('pushZero')); return; }
@@ -4050,8 +4097,8 @@ function pushAttorneyCost() {
   switchCalc('interest');
   alert(t('pushAdded'));
 }
-function pushCourtCost() {
-  if (!courtLast) computeFees();
+async function pushCourtCost() {
+  if (!courtLast) await computeFees();
   // The court fee arises on filing the action, so the pushed cost originates
   // on the filing date (falling back to the AS-OF date when not filed yet).
   const filed = document.getElementById('courtFeeDate').value;
