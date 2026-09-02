@@ -981,6 +981,7 @@ td.hl { color:var(--rich-black); font-weight:500; }
     </div>
     <button class="btn btn-ghost btn-sm" onclick="exportCSV()" style="" data-i18n="headerExportCSV">Export CSV</button>
     <button class="btn btn-ghost btn-sm" onclick="exportSnapshot()" title="Export calculation snapshot (JSON) for SharePoint/Dataverse" data-i18n="headerSnapshot">Snapshot</button>
+    <button class="btn btn-ghost btn-sm" onclick="saveSnapshotToSP()" title="Save an immutable snapshot to the SharePoint Snapshots list (append-only; does not change the claim data)">Save snapshot</button>
     <button class="btn btn-ghost btn-sm" onclick="saveSession()" title="Save all data to JSON file" data-i18n="headerSave">Save</button>
     <button class="btn btn-ghost btn-sm" title="Load a claim from SharePoint" data-i18n="headerLoad" onclick="openClaimPicker()">Load</button>
   </div>
@@ -1867,12 +1868,15 @@ td.hl { color:var(--rich-black); font-weight:500; }
   }
   window.spListClaims = function () { return spBridge('lexcalc:listClaims'); };
   window.spLoadClaim = function (id) { return spBridge('lexcalc:loadClaim', { claimId: id }); };
+  window.spSaveSnapshot = function (snapshot, caseInfo) { return spBridge('lexcalc:saveSnapshot', { snapshot: snapshot, caseInfo: caseInfo }); };
   window.addEventListener('message', function (ev) {
     var d = ev.data;
-    if (!d || (d.type !== 'lexcalc:claimsResult' && d.type !== 'lexcalc:claimResult')) return;
+    if (!d || (d.type !== 'lexcalc:claimsResult' && d.type !== 'lexcalc:claimResult' && d.type !== 'lexcalc:saveSnapshotResult')) return;
     var p = lpending[d.reqId]; if (!p) return; delete lpending[d.reqId];
-    if (d.ok) { p.resolve(d.type === 'lexcalc:claimsResult' ? (d.claims || []) : d.session); }
-    else { p.reject(new Error(d.error || 'request failed')); }
+    if (!d.ok) { p.reject(new Error(d.error || 'request failed')); return; }
+    if (d.type === 'lexcalc:claimsResult') { p.resolve(d.claims || []); }
+    else if (d.type === 'lexcalc:claimResult') { p.resolve(d.session); }
+    else { p.resolve(d.item || true); }
   });
 
   // The host frames this UI at a fixed, screen-sized height and the app scrolls
@@ -5822,6 +5826,7 @@ function selectClaim(spId) {
   window.spLoadClaim(spId).then(function (session) {
     if (!session) { throw new Error('empty session'); }
     applySession(session);
+    window.__spClaimId = session._claimSpId || null; // link snapshots to this claim
     if (typeof calculate === 'function') { calculate(); }
     closeModal('claimPickerModal');
   }).catch(function (e) { if (st) st.textContent = 'Could not load claim: ' + ((e && e.message) || e); });
@@ -5836,6 +5841,7 @@ function pickerLoadJson(event) {
   reader.onload = function (e) {
     try {
       applySession(JSON.parse(e.target.result));
+      window.__spClaimId = null; // a local JSON upload is not a SharePoint-backed claim
       if (typeof calculate === 'function') { calculate(); }
       event.target.value = '';
       closeModal('claimPickerModal');
@@ -5844,6 +5850,23 @@ function pickerLoadJson(event) {
     }
   };
   reader.readAsText(file);
+}
+// Save an immutable snapshot of the current calculation to the SharePoint
+// Snapshots list (append-only; never changes the claim data). Governance step 1.
+async function saveSnapshotToSP() {
+  if (typeof window.spSaveSnapshot !== 'function') { alert('Not connected to SharePoint.'); return; }
+  if (!lastInput || !lastOutput) { alert('Calculate first — nothing to snapshot.'); return; }
+  var snapshot = window.LexCalcEngine.buildSnapshot(lastInput, lastOutput);
+  var caseInfo = {
+    caseRef: (typeof caseRef !== 'undefined' && caseRef) ? caseRef : (snapshot.caseRef || ''),
+    claimSpId: window.__spClaimId || null,
+  };
+  try {
+    await window.spSaveSnapshot(snapshot, caseInfo);
+    alert('Snapshot saved to the SharePoint Snapshots list.');
+  } catch (e) {
+    alert('Could not save snapshot: ' + ((e && e.message) || e));
+  }
 }
 function loadSession(event) {
   const file = event.target.files[0];
