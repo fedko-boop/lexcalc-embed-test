@@ -982,7 +982,7 @@ td.hl { color:var(--rich-black); font-weight:500; }
     <button class="btn btn-ghost btn-sm" onclick="exportCSV()" style="" data-i18n="headerExportCSV">Export CSV</button>
     <button class="btn btn-ghost btn-sm" onclick="exportSnapshot()" title="Export calculation snapshot (JSON) for SharePoint/Dataverse" data-i18n="headerSnapshot">Snapshot</button>
     <button class="btn btn-ghost btn-sm" onclick="saveSession()" title="Save all data to JSON file" data-i18n="headerSave">Save</button>
-    <label class="btn btn-ghost btn-sm" style="cursor:pointer" title="Load previously saved session" data-i18n="headerLoad">Load<input type="file" accept=".json" onchange="loadSession(event)" style="display:none"></label>
+    <button class="btn btn-ghost btn-sm" title="Load a claim from SharePoint" data-i18n="headerLoad" onclick="openClaimPicker()">Load</button>
   </div>
 </header>
 
@@ -1383,6 +1383,19 @@ td.hl { color:var(--rich-black); font-weight:500; }
 </div><!-- /view-settings -->
 
 <!-- ==================== ADD INVOICE MODAL ==================== -->
+<div class="modal-overlay" id="claimPickerModal">
+  <div class="modal" style="width:720px;max-width:96vw">
+    <div class="modal-header">
+      <div class="modal-title">Load claim from SharePoint</div>
+      <button class="remove-x" onclick="closeModal('claimPickerModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="text" id="claimPickerSearch" placeholder="Search reference, claimant, debtor…" oninput="renderClaimPicker()" style="width:100%;box-sizing:border-box;margin-bottom:10px">
+      <div id="claimPickerStatus" style="font-size:13px;margin-bottom:8px"></div>
+      <div id="claimPickerList" style="max-height:52vh;overflow:auto"></div>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="invoiceModal">
   <div class="modal">
     <div class="modal-header">
@@ -1826,6 +1839,34 @@ td.hl { color:var(--rich-black); font-weight:500; }
     if (!d || d.type !== 'lexcalc:calcResult') return;
     var p = pending[d.reqId]; if (!p) return; delete pending[d.reqId];
     if (d.ok) p.resolve(d.result); else p.reject(new Error(d.error || 'engine error'));
+  });
+
+  // --- list-backed feature bridge (claim picker) ---
+  // Generic request/response over postMessage. The host reads SharePoint (the
+  // frame never can) and replies with the matching result type. Data only —
+  // the frame gets rows to render, never a token or list access.
+  var lseq = 0, lpending = {};
+  function spBridge(reqType, payload) {
+    return new Promise(function (resolve, reject) {
+      var reqId = ++lseq;
+      lpending[reqId] = { resolve: resolve, reject: reject };
+      window.setTimeout(function () {
+        if (lpending[reqId]) { delete lpending[reqId]; reject(new Error('SharePoint did not respond')); }
+      }, 20000);
+      var msg = { type: reqType, reqId: reqId };
+      if (payload) { for (var k in payload) { if (Object.prototype.hasOwnProperty.call(payload, k)) msg[k] = payload[k]; } }
+      try { window.parent.postMessage(msg, '*'); }
+      catch (e) { delete lpending[reqId]; reject(e); }
+    });
+  }
+  window.spListClaims = function () { return spBridge('lexcalc:listClaims'); };
+  window.spLoadClaim = function (id) { return spBridge('lexcalc:loadClaim', { claimId: id }); };
+  window.addEventListener('message', function (ev) {
+    var d = ev.data;
+    if (!d || (d.type !== 'lexcalc:claimsResult' && d.type !== 'lexcalc:claimResult')) return;
+    var p = lpending[d.reqId]; if (!p) return; delete lpending[d.reqId];
+    if (d.ok) { p.resolve(d.type === 'lexcalc:claimsResult' ? (d.claims || []) : d.session); }
+    else { p.reject(new Error(d.error || 'request failed')); }
   });
 
   // The host frames this UI at a fixed, screen-sized height and the app scrolls
@@ -5732,6 +5773,53 @@ function applySession(s) {
   calculate();
 }
 
+// --- Claim picker (SharePoint list-load) ---
+var __claimCache = [];
+function openClaimPicker() {
+  var m = document.getElementById('claimPickerModal'); if (m) m.classList.add('open');
+  var search = document.getElementById('claimPickerSearch'); if (search) search.value = '';
+  var st = document.getElementById('claimPickerStatus');
+  var list = document.getElementById('claimPickerList');
+  if (list) list.innerHTML = '';
+  __claimCache = [];
+  if (typeof window.spListClaims !== 'function') { if (st) st.textContent = 'Not connected to SharePoint.'; return; }
+  if (st) st.textContent = 'Loading claims…';
+  window.spListClaims().then(function (claims) { __claimCache = claims || []; renderClaimPicker(); })
+    .catch(function (e) { if (st) st.textContent = 'Could not load claims: ' + ((e && e.message) || e); });
+}
+function renderClaimPicker() {
+  var st = document.getElementById('claimPickerStatus');
+  var list = document.getElementById('claimPickerList');
+  if (!list) return;
+  if (!__claimCache.length) {
+    if (st) st.textContent = 'No claims yet. Once the Claims list is set up in SharePoint, your cases appear here.';
+    list.innerHTML = ''; return;
+  }
+  var el = document.getElementById('claimPickerSearch');
+  var q = (el && el.value ? el.value : '').trim().toLowerCase();
+  var rows = __claimCache.filter(function (c) {
+    if (!q) return true;
+    return ((c.caseRef || '') + ' ' + (c.claimant || '') + ' ' + (c.debtor || '')).toLowerCase().indexOf(q) !== -1;
+  });
+  if (st) st.textContent = rows.length + ' of ' + __claimCache.length + ' claim(s)';
+  list.innerHTML = rows.map(function (c) {
+    return '<button type="button" class="btn btn-ghost" style="display:block;width:100%;text-align:left;margin-bottom:6px" onclick="selectClaim(' + c.spId + ')">' +
+      '<strong>' + escapeHtml(c.caseRef || ('#' + c.spId)) + '</strong>' +
+      (c.status ? ' <span style="opacity:.7">· ' + escapeHtml(c.status) + '</span>' : '') +
+      '<br><span style="font-size:12px;opacity:.8">' + escapeHtml(c.claimant || '—') + ' → ' + escapeHtml(c.debtor || '—') + '</span>' +
+      '</button>';
+  }).join('');
+}
+function selectClaim(spId) {
+  var st = document.getElementById('claimPickerStatus');
+  if (st) st.textContent = 'Loading case…';
+  window.spLoadClaim(spId).then(function (session) {
+    if (!session) { throw new Error('empty session'); }
+    applySession(session);
+    if (typeof calculate === 'function') { calculate(); }
+    closeModal('claimPickerModal');
+  }).catch(function (e) { if (st) st.textContent = 'Could not load claim: ' + ((e && e.message) || e); });
+}
 function loadSession(event) {
   const file = event.target.files[0];
   if (!file) return;
