@@ -1392,7 +1392,13 @@ td.hl { color:var(--rich-black); font-weight:500; }
     <div class="modal-body">
       <input type="text" id="claimPickerSearch" placeholder="Search reference, claimant, debtor…" oninput="renderClaimPicker()" style="width:100%;box-sizing:border-box;margin-bottom:10px">
       <div id="claimPickerStatus" style="font-size:13px;margin-bottom:8px"></div>
-      <div id="claimPickerList" style="max-height:52vh;overflow:auto"></div>
+      <div id="claimPickerList" style="max-height:44vh;overflow:auto"></div>
+      <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer" title="Load a previously saved session JSON file">⇪ Upload session JSON<input type="file" accept=".json" onchange="pickerLoadJson(event)" style="display:none"></label>
+        <div style="font-size:12px;opacity:.75;margin-top:8px;line-height:1.4">
+          Loads a saved session file into the calculator <strong>on this screen only</strong>. It does <strong>not</strong> save or push the inputs to the SharePoint claims database. To store a case in SharePoint, use the claims list (save-back is coming).
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -5819,6 +5825,25 @@ function selectClaim(spId) {
     if (typeof calculate === 'function') { calculate(); }
     closeModal('claimPickerModal');
   }).catch(function (e) { if (st) st.textContent = 'Could not load claim: ' + ((e && e.message) || e); });
+}
+// Local JSON session upload (the offline tool's original Load), preserved inside
+// the picker. On-screen load only — it does NOT push to the SharePoint database.
+function pickerLoadJson(event) {
+  var st = document.getElementById('claimPickerStatus');
+  var file = event.target.files && event.target.files[0];
+  if (!file) { return; }
+  var reader = new FileReader();
+  reader.onload = function (e) {
+    try {
+      applySession(JSON.parse(e.target.result));
+      if (typeof calculate === 'function') { calculate(); }
+      event.target.value = '';
+      closeModal('claimPickerModal');
+    } catch (err) {
+      if (st) { st.textContent = 'Could not load file: ' + ((err && err.message) || err); }
+    }
+  };
+  reader.readAsText(file);
 }
 function loadSession(event) {
   const file = event.target.files[0];
