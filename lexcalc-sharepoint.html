@@ -982,6 +982,7 @@ td.hl { color:var(--rich-black); font-weight:500; }
     <button class="btn btn-ghost btn-sm" onclick="exportCSV()" style="" data-i18n="headerExportCSV">Export CSV</button>
     <button class="btn btn-ghost btn-sm" onclick="exportSnapshot()" title="Export calculation snapshot (JSON) for SharePoint/Dataverse" data-i18n="headerSnapshot">Snapshot</button>
     <button class="btn btn-ghost btn-sm" onclick="saveSnapshotToSP()" title="Save an immutable snapshot to the SharePoint Snapshots list (append-only; does not change the claim data)">Save snapshot</button>
+    <button class="btn btn-ghost btn-sm" onclick="openNoticeGenerator()" title="Generate the pre-litigation notice (predžalobná výzva) as a Word document">Generate notice</button>
     <button class="btn btn-ghost btn-sm" onclick="saveSession()" title="Save all data to JSON file" data-i18n="headerSave">Save</button>
     <button class="btn btn-ghost btn-sm" title="Load a claim from SharePoint" data-i18n="headerLoad" onclick="openClaimPicker()">Load</button>
   </div>
@@ -1384,6 +1385,42 @@ td.hl { color:var(--rich-black); font-weight:500; }
 </div><!-- /view-settings -->
 
 <!-- ==================== ADD INVOICE MODAL ==================== -->
+<div class="modal-overlay" id="noticeGenModal">
+  <div class="modal" style="width:880px;max-width:96vw">
+    <div class="modal-header">
+      <div class="modal-title">Notice details — predžalobná výzva</div>
+      <button class="remove-x" onclick="closeModal('noticeGenModal')">×</button>
+    </div>
+    <div class="modal-body" style="max-height:72vh;overflow:auto">
+      <p style="font-size:12px;opacity:.75;margin:0 0 12px">Pre-filled from the case and the last calculation. Complete the remaining fields, then generate. The letterhead and signature are added automatically. Always review the Word file before sending.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin:0">
+          <legend style="font-size:12px;font-weight:600;padding:0 4px">Creditor (Mandant)</legend>
+          <label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Name</span><input id="ng_credName" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">IČO</span><input id="ng_credIco" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Place of business</span><input id="ng_credPob" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Street + number</span><input id="ng_credAddr" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">PSČ</span><input id="ng_credPsc" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">City</span><input id="ng_credCity" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">IBAN (for the debt)</span><input id="ng_credIban" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label>
+        </fieldset>
+        <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin:0">
+          <legend style="font-size:12px;font-weight:600;padding:0 4px">Debtor (Dlžník)</legend>
+          <label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Name</span><input id="ng_debName" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">IČO</span><input id="ng_debIco" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Street + number</span><input id="ng_debAddr" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">PSČ</span><input id="ng_debPsc" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">City</span><input id="ng_debCity" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Register court</span><input id="ng_regCourt" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Section (oddiel)</span><input id="ng_regSection" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Insert (vložka)</span><input id="ng_regInsert" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label>
+        </fieldset>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px">
+        <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin:0">
+          <legend style="font-size:12px;font-weight:600;padding:0 4px">Invoice &amp; claim</legend>
+          <label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Invoice number</span><input id="ng_invNum" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Issue date</span><input id="ng_invIssue" type="date" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Due date</span><input id="ng_invDue" type="date" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Claim title (z titulu …)</span><select id="ng_claimTitle" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"><option value="dodania tovarov">dodania tovarov (dodávka tovaru)</option><option value="poskytnutia služieb">poskytnutia služieb</option><option value="poskytnutia peňažných prostriedkov">poskytnutia peňažných prostriedkov (úver / pôžička)</option><option value="nájmu">nájmu</option><option value="zhotovenia diela">zhotovenia diela</option></select></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Variable symbol</span><input id="ng_vs" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label>
+        </fieldset>
+        <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin:0">
+          <legend style="font-size:12px;font-weight:600;padding:0 4px">Amounts (EUR) — from the calculation</legend>
+          <label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Principal</span><input id="ng_principal" type="number" step="0.01" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Statutory interest</span><input id="ng_interest" type="number" step="0.01" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Flat fee (§369c)</span><input id="ng_flatFee" type="number" step="0.01" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Attorney fee (incl. VAT)</span><input id="ng_attorney" type="number" step="0.01" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label>
+        </fieldset>
+      </div>
+      <div id="noticeGenStatus" style="font-size:13px;margin-top:12px;min-height:18px"></div>
+      <div style="text-align:right;margin-top:6px">
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('noticeGenModal')">Cancel</button>
+        <button class="btn btn-sm" style="background:#11151C;color:#fff;border-color:#11151C" onclick="submitNoticeGenerate()">Generate notice</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="claimPickerModal">
   <div class="modal" style="width:720px;max-width:96vw">
     <div class="modal-header">
@@ -1869,13 +1906,16 @@ td.hl { color:var(--rich-black); font-weight:500; }
   window.spListClaims = function () { return spBridge('lexcalc:listClaims'); };
   window.spLoadClaim = function (id) { return spBridge('lexcalc:loadClaim', { claimId: id }); };
   window.spSaveSnapshot = function (snapshot, caseInfo) { return spBridge('lexcalc:saveSnapshot', { snapshot: snapshot, caseInfo: caseInfo }); };
+  // DocGen: ask the host to generate a document from the matter and download it.
+  window.lexcalcGenerate = function (matter, documentId) { return spBridge('lexcalc:generate', { matter: matter, document: documentId || 'predzalobna-vyzva' }); };
   window.addEventListener('message', function (ev) {
     var d = ev.data;
-    if (!d || (d.type !== 'lexcalc:claimsResult' && d.type !== 'lexcalc:claimResult' && d.type !== 'lexcalc:saveSnapshotResult')) return;
+    if (!d || (d.type !== 'lexcalc:claimsResult' && d.type !== 'lexcalc:claimResult' && d.type !== 'lexcalc:saveSnapshotResult' && d.type !== 'lexcalc:generateResult')) return;
     var p = lpending[d.reqId]; if (!p) return; delete lpending[d.reqId];
     if (!d.ok) { p.reject(new Error(d.error || 'request failed')); return; }
     if (d.type === 'lexcalc:claimsResult') { p.resolve(d.claims || []); }
     else if (d.type === 'lexcalc:claimResult') { p.resolve(d.session); }
+    else if (d.type === 'lexcalc:generateResult') { p.resolve(d.filename || true); }
     else { p.resolve(d.item || true); }
   });
 
@@ -5853,6 +5893,69 @@ function pickerLoadJson(event) {
 }
 // Save an immutable snapshot of the current calculation to the SharePoint
 // Snapshots list (append-only; never changes the claim data). Governance step 1.
+// --- Notice generator (predžalobná výzva) ---
+function ngSetV(id, v) { var el = document.getElementById(id); if (el) el.value = (v == null ? '' : v); }
+function ngGetV(id) { var el = document.getElementById(id); return el ? String(el.value).trim() : ''; }
+function ngFmtMoney(v) {
+  if (v === '' || v == null) return '';
+  var n = parseFloat(String(v).replace(',', '.')); if (!isFinite(n)) return '';
+  var parts = n.toFixed(2).split('.'); var i = parts[0], neg = '';
+  if (i.charAt(0) === '-') { neg = '-'; i = i.slice(1); }
+  var out = '', c = 0;
+  for (var k = i.length - 1; k >= 0; k--) { out = i.charAt(k) + out; if (++c % 3 === 0 && k > 0) out = ' ' + out; }
+  return neg + out + ',' + parts[1] + ' EUR';
+}
+function ngIsoToSk(v) { if (!v) return ''; var p = String(v).split('-'); return p.length === 3 ? (p[2] + '.' + p[1] + '.' + p[0]) : v; }
+function openNoticeGenerator() {
+  var sess = (typeof collectSession === 'function') ? collectSession() : {};
+  var cred = sess.creditor || {}, deb = sess.debtorEntity || {};
+  var invs = (sess.invoices || []).filter(function (i) { return i && i.enabled !== false; });
+  var inv0 = invs[0] || (sess.invoices || [])[0] || {};
+  ngSetV('ng_credName', cred.name || sess.claimant || '');
+  ngSetV('ng_credIco', cred.ico || '');
+  ngSetV('ng_credPob', ''); ngSetV('ng_credAddr', cred.address || '');
+  ngSetV('ng_credPsc', ''); ngSetV('ng_credCity', ''); ngSetV('ng_credIban', '');
+  ngSetV('ng_debName', deb.name || sess.debtor || '');
+  ngSetV('ng_debIco', deb.ico || '');
+  ngSetV('ng_debAddr', deb.address || '');
+  ngSetV('ng_debPsc', ''); ngSetV('ng_debCity', '');
+  ngSetV('ng_regCourt', ''); ngSetV('ng_regSection', ''); ngSetV('ng_regInsert', '');
+  ngSetV('ng_invNum', inv0.ref || ''); ngSetV('ng_invIssue', ''); ngSetV('ng_invDue', inv0.maturity || '');
+  ngSetV('ng_vs', '');
+  var t = (typeof lastOutput !== 'undefined' && lastOutput && lastOutput.totals) ? lastOutput.totals : null;
+  ngSetV('ng_principal', t && t.totPrincipal != null ? t.totPrincipal : '');
+  ngSetV('ng_interest', t && t.totInterest != null ? t.totInterest : '');
+  ngSetV('ng_flatFee', 40);
+  ngSetV('ng_attorney', '');
+  var st = document.getElementById('noticeGenStatus'); if (st) st.textContent = '';
+  var m = document.getElementById('noticeGenModal'); if (m) m.classList.add('open');
+}
+function submitNoticeGenerate() {
+  var st = document.getElementById('noticeGenStatus');
+  var matter = {
+    creditor: { name: ngGetV('ng_credName'), ico: ngGetV('ng_credIco'), placeOfBusiness: ngGetV('ng_credPob'),
+      address: { line: ngGetV('ng_credAddr'), postalCode: ngGetV('ng_credPsc'), city: ngGetV('ng_credCity') }, iban: ngGetV('ng_credIban') },
+    debtor: { name: ngGetV('ng_debName'), ico: ngGetV('ng_debIco'),
+      address: { line: ngGetV('ng_debAddr'), postalCode: ngGetV('ng_debPsc'), city: ngGetV('ng_debCity') },
+      register: { court: ngGetV('ng_regCourt'), section: ngGetV('ng_regSection'), insert: ngGetV('ng_regInsert') } },
+    invoice: { number: ngGetV('ng_invNum'), issueDate: ngIsoToSk(ngGetV('ng_invIssue')), dueDate: ngIsoToSk(ngGetV('ng_invDue')) },
+    claim: { title: ngGetV('ng_claimTitle'),
+      principalFormatted: ngFmtMoney(ngGetV('ng_principal')), interestFormatted: ngFmtMoney(ngGetV('ng_interest')),
+      flatFeeFormatted: ngFmtMoney(ngGetV('ng_flatFee')), attorneyFeesFormatted: ngFmtMoney(ngGetV('ng_attorney')) },
+    payment: { variableSymbol: ngGetV('ng_vs') }
+  };
+  var need = [['creditor name', matter.creditor.name], ['creditor IČO', matter.creditor.ico], ['creditor IBAN', matter.creditor.iban],
+    ['debtor name', matter.debtor.name], ['invoice number', matter.invoice.number], ['claim title', matter.claim.title],
+    ['principal', matter.claim.principalFormatted], ['interest', matter.claim.interestFormatted],
+    ['flat fee', matter.claim.flatFeeFormatted], ['attorney fee', matter.claim.attorneyFeesFormatted],
+    ['variable symbol', matter.payment.variableSymbol]];
+  var missing = need.filter(function (x) { return !x[1]; }).map(function (x) { return x[0]; });
+  if (missing.length) { if (st) st.textContent = 'Please fill: ' + missing.join(', '); return; }
+  if (typeof window.lexcalcGenerate !== 'function') { if (st) st.textContent = 'Not connected to the SharePoint host.'; return; }
+  if (st) st.textContent = 'Generating…';
+  window.lexcalcGenerate(matter).then(function (fn) { if (st) st.textContent = 'Done — downloaded ' + (fn === true ? 'the notice' : fn) + '.'; })
+    .catch(function (e) { if (st) st.textContent = 'Failed: ' + ((e && e.message) || e); });
+}
 async function saveSnapshotToSP() {
   if (typeof window.spSaveSnapshot !== 'function') { alert('Not connected to SharePoint.'); return; }
   if (!lastInput || !lastOutput) { alert('Calculate first — nothing to snapshot.'); return; }
