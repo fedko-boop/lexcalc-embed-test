@@ -1405,8 +1405,10 @@ td.hl { color:var(--rich-black); font-weight:500; }
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px">
         <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin:0">
-          <legend style="font-size:12px;font-weight:600;padding:0 4px">Invoice &amp; claim</legend>
-          <label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Invoice number</span><input id="ng_invNum" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Issue date</span><input id="ng_invIssue" type="date" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Due date</span><input id="ng_invDue" type="date" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Claim title (z titulu …)</span><select id="ng_claimTitle" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"><option value="dodania tovarov">dodania tovarov (dodávka tovaru)</option><option value="poskytnutia služieb">poskytnutia služieb</option><option value="poskytnutia peňažných prostriedkov">poskytnutia peňažných prostriedkov (úver / pôžička)</option><option value="nájmu">nájmu</option><option value="zhotovenia diela">zhotovenia diela</option></select></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Variable symbol</span><input id="ng_vs" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label>
+          <legend style="font-size:12px;font-weight:600;padding:0 4px">Invoices &amp; claim</legend>
+          <div style="font-size:11px;opacity:.75;margin:6px 0 2px">Invoices (from the case — number · due · amount)</div>
+          <div id="ng_invList" style="max-height:150px;overflow:auto;border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin-bottom:8px;font-size:12px;line-height:1.5"></div>
+          <label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Claim title (z titulu …)</span><select id="ng_claimTitle" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"><option value="dodania tovarov">dodania tovarov (dodávka tovaru)</option><option value="poskytnutia služieb">poskytnutia služieb</option><option value="poskytnutia peňažných prostriedkov">poskytnutia peňažných prostriedkov (úver / pôžička)</option><option value="nájmu">nájmu</option><option value="zhotovenia diela">zhotovenia diela</option></select></label><label style="display:block;margin:6px 0"><span style="display:block;font-size:11px;opacity:.75;margin-bottom:2px">Variable symbol</span><input id="ng_vs" type="text" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--border);border-radius:4px"></label>
         </fieldset>
         <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin:0">
           <legend style="font-size:12px;font-weight:600;padding:0 4px">Amounts (EUR) — from the calculation</legend>
@@ -5920,12 +5922,25 @@ function openNoticeGenerator() {
   ngSetV('ng_debAddr', deb.address || '');
   ngSetV('ng_debPsc', ''); ngSetV('ng_debCity', '');
   ngSetV('ng_regCourt', ''); ngSetV('ng_regSection', ''); ngSetV('ng_regInsert', '');
-  ngSetV('ng_invNum', inv0.ref || ''); ngSetV('ng_invIssue', ''); ngSetV('ng_invDue', inv0.maturity || '');
   ngSetV('ng_vs', '');
+  // Invoices: every enabled invoice becomes its own row in the notice.
+  var jur = sess.jurisdiction || 'SK';
+  var perFee = jur === 'CZ' ? 1200 : 40;
+  window.__ngInvoices = invs.map(function (i) {
+    return { number: i.ref || '', issueDate: '', dueDate: ngIsoToSk(i.maturity), amountFormatted: ngFmtMoney(i.principal) };
+  });
+  var principalTotal = invs.reduce(function (a, i) { return a + (parseFloat(i.principal) || 0); }, 0);
+  var flatCount = invs.filter(function (i) { return i.flatFeeEnabled; }).length;
+  var list = document.getElementById('ng_invList');
+  if (list) list.innerHTML = invs.length
+    ? invs.map(function (i) { return '<div>' + (i.ref || '—') + ' · ' + ngIsoToSk(i.maturity) + ' · ' + ngFmtMoney(i.principal) + '</div>'; }).join('')
+    : '<div style="opacity:.6">No invoices in the case.</div>';
   var t = (typeof lastOutput !== 'undefined' && lastOutput && lastOutput.totals) ? lastOutput.totals : null;
-  ngSetV('ng_principal', t && t.totPrincipal != null ? t.totPrincipal : '');
+  ngSetV('ng_principal', principalTotal || (t && t.totPrincipal) || '');
   ngSetV('ng_interest', t && t.totInterest != null ? t.totInterest : '');
-  ngSetV('ng_flatFee', 40);
+  // Flat fee comes from the case marks (40/1200 per flagged invoice); blank when
+  // none is claimed, so the notice omits the flat-fee clause entirely.
+  ngSetV('ng_flatFee', flatCount ? flatCount * perFee : '');
   ngSetV('ng_attorney', '');
   var st = document.getElementById('noticeGenStatus'); if (st) st.textContent = '';
   var m = document.getElementById('noticeGenModal'); if (m) m.classList.add('open');
@@ -5938,18 +5953,18 @@ function submitNoticeGenerate() {
     debtor: { name: ngGetV('ng_debName'), ico: ngGetV('ng_debIco'),
       address: { line: ngGetV('ng_debAddr'), postalCode: ngGetV('ng_debPsc'), city: ngGetV('ng_debCity') },
       register: { court: ngGetV('ng_regCourt'), section: ngGetV('ng_regSection'), insert: ngGetV('ng_regInsert') } },
-    invoice: { number: ngGetV('ng_invNum'), issueDate: ngIsoToSk(ngGetV('ng_invIssue')), dueDate: ngIsoToSk(ngGetV('ng_invDue')) },
+    invoices: (window.__ngInvoices || []),
     claim: { title: ngGetV('ng_claimTitle'),
       principalFormatted: ngFmtMoney(ngGetV('ng_principal')), interestFormatted: ngFmtMoney(ngGetV('ng_interest')),
       flatFeeFormatted: ngFmtMoney(ngGetV('ng_flatFee')), attorneyFeesFormatted: ngFmtMoney(ngGetV('ng_attorney')) },
     payment: { variableSymbol: ngGetV('ng_vs') }
   };
   var need = [['creditor name', matter.creditor.name], ['creditor IČO', matter.creditor.ico], ['creditor IBAN', matter.creditor.iban],
-    ['debtor name', matter.debtor.name], ['invoice number', matter.invoice.number], ['claim title', matter.claim.title],
+    ['debtor name', matter.debtor.name], ['claim title', matter.claim.title],
     ['principal', matter.claim.principalFormatted], ['interest', matter.claim.interestFormatted],
-    ['flat fee', matter.claim.flatFeeFormatted], ['attorney fee', matter.claim.attorneyFeesFormatted],
-    ['variable symbol', matter.payment.variableSymbol]];
+    ['attorney fee', matter.claim.attorneyFeesFormatted], ['variable symbol', matter.payment.variableSymbol]];
   var missing = need.filter(function (x) { return !x[1]; }).map(function (x) { return x[0]; });
+  if (!matter.invoices.length) missing.unshift('at least one invoice (add invoices in the calculator)');
   if (missing.length) { if (st) st.textContent = 'Please fill: ' + missing.join(', '); return; }
   if (typeof window.lexcalcGenerate !== 'function') { if (st) st.textContent = 'Not connected to the SharePoint host.'; return; }
   if (st) st.textContent = 'Generating…';
