@@ -713,6 +713,9 @@ td.hl { color:var(--rich-black); font-weight:500; }
 .lg-item { padding:8px 12px; border-bottom:1px solid var(--light-rule); font-family:'Noto Sans',sans-serif; font-size:12px; }
 .lg-item.lg-cost { border-left:2px solid var(--madder); padding-left:10px; }
 .lg-empty { padding:14px 12px; color:var(--muted); font-size:11px; font-style:italic; font-family:'Noto Sans',sans-serif; }
+.lg-shared-ref { cursor:pointer; line-height:1.5; border-left:2px dashed var(--madder); padding-left:10px; }
+.lg-shared-ref:hover { color:var(--ink2); background:var(--gold-bg); }
+.lg-shared-chip { font-family:'Noto Sans',sans-serif; font-size:9px; font-weight:600; color:var(--gold-bd); border:1px solid var(--gold-bd); border-radius:8px; padding:0 6px; margin-left:6px; vertical-align:middle; }
 .lg-foot {
   padding:8px 12px; border-top:2px solid var(--border2);
   font-family:'Noto Sans',sans-serif; font-size:11px;
@@ -2043,6 +2046,7 @@ const TRANSLATIONS = {
     contractualInterest:'Contractual Interest',
     penaltyPokuta:'Penalty / Pokuta', onOrigPrincipals:'on original principals',
     costsFeesLabel:'Costs & Fees', itemsOutstanding:'{n} item(s) outstanding',
+    sharedCostRef:'Shared costs ({names}) are listed on invoice {anchor}, allocated across this bundle of {n} invoices.', sharedCostChip:'shared',
     tabOverview:'Overview', tabLedger:'Full Ledger', tabAudit:'Audit Log', tabChart:'Chart', tabFlows:'Payment flows',
     ledgerViewChrono:'Chronological', ledgerViewGrouped:'By invoice', ledgerViewAcross:'Across invoices',
     lgStreams:'Interest accrual', lgAccrued:'Accrued', lgPaid:'Paid', lgOutstanding:'Outstanding', lgAllocated:'Allocated',
@@ -2171,6 +2175,7 @@ const TRANSLATIONS = {
     contractualInterest:'Zmluvný úrok',
     penaltyPokuta:'Zmluvná pokuta', onOrigPrincipals:'z pôvodných istín',
     costsFeesLabel:'Trovy a poplatky', itemsOutstanding:'{n} položka(iek) nezaplatená',
+    sharedCostRef:'Spoločné trovy ({names}) sú uvedené pri faktúre {anchor}, rozpočítané naprieč týmto balíkom {n} faktúr.', sharedCostChip:'spoločné',
     tabOverview:'Prehľad', tabLedger:'Plný výkaz', tabAudit:'Audit log', tabChart:'Graf', tabFlows:'Toky platieb',
     ledgerViewChrono:'Chronologicky', ledgerViewGrouped:'Podľa faktúry', ledgerViewAcross:'Naprieč faktúrami',
     lgStreams:'Úročenie', lgAccrued:'Naakumulované', lgPaid:'Uhradené', lgOutstanding:'Nezaplatené', lgAllocated:'Alokované',
@@ -2299,6 +2304,7 @@ const TRANSLATIONS = {
     contractualInterest:'Smluvní úrok',
     penaltyPokuta:'Smluvní pokuta', onOrigPrincipals:'z původních jistin',
     costsFeesLabel:'Náklady a poplatky', itemsOutstanding:'{n} položka(ek) nezaplacena',
+    sharedCostRef:'Společné náklady ({names}) jsou uvedeny u faktury {anchor}, rozpočítané napříč tímto balíkem {n} faktur.', sharedCostChip:'společné',
     tabOverview:'Přehled', tabLedger:'Plný výkaz', tabAudit:'Audit log', tabChart:'Graf', tabFlows:'Toky plateb',
     ledgerViewChrono:'Chronologicky', ledgerViewGrouped:'Podle faktury', ledgerViewAcross:'Napříč fakturami',
     lgStreams:'Úročení', lgAccrued:'Naakumulováno', lgPaid:'Uhrazeno', lgOutstanding:'Nezaplaceno', lgAllocated:'Alokováno',
@@ -5164,6 +5170,39 @@ function invoiceRemainingCosts(r, result) {
       : 0);
 }
 
+// Shared costs (scope 'all') are stored on the anchor invoice (index 0) only, so
+// every other invoice in the bundle would otherwise render a false "no costs"
+// empty state even though it bears a share of them. Return the shared-cost
+// summary once (anchor ref + the shared descriptions + bundle size), or null.
+function sharedCostSummary(result) {
+  const anchor = result && result[0];
+  if (!anchor) return null;
+  const shared = (anchor.periods || []).filter(p => p.type === 'cost' && p.isShared);
+  if (!shared.length) return null;
+  return { anchorRef: anchor.inv.ref || anchor.inv.id, descs: shared.map(c => c.desc), count: result.length };
+}
+// The muted, hover-highlighting reference line shown on non-anchor invoices in
+// place of the false empty state. Points to the anchor invoice's cost card;
+// never repeats the amount (single-source of every cost on the anchor).
+function sharedCostRefHtml(info) {
+  const names = info.descs.map(escapeHtml).join(', ');
+  const txt = t('sharedCostRef')
+    .replace('{names}', names)
+    .replace('{anchor}', escapeHtml(info.anchorRef))
+    .replace('{n}', info.count);
+  return `<div class="lg-empty lg-shared-ref" onmouseenter="highlightSharedAnchor()" onmouseleave="clearSharedAnchor()">${txt}</div>`;
+}
+function highlightSharedAnchor() {
+  const el = document.getElementById('shared-cost-anchor');
+  if (!el) return;
+  el.style.outline = '2px solid var(--gold-bd)'; el.style.outlineOffset = '2px';
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function clearSharedAnchor() {
+  const el = document.getElementById('shared-cost-anchor');
+  if (el) { el.style.outline = ''; el.style.outlineOffset = ''; }
+}
+
 // Interest-accrual sub-table for one invoice (period rows only, with a
 // gross-accrued footer and an outstanding line when interest was partly
 // paid). Shared by the two grouped ledger views.
@@ -5251,6 +5290,8 @@ function renderLedgerGrouped(result, cur, today) {
     const streamsCol = invoiceStreamsTable(r, cur);
 
     // ── Column 2: costs ──
+    const sharedInfo = sharedCostSummary(result);
+    const isAnchor = result.indexOf(r) === 0;
     const costItems = costs.length ? costs.map(c=>`
       <div class="lg-item lg-cost">
         <div style="display:flex;justify-content:space-between;gap:8px">
@@ -5258,7 +5299,8 @@ function renderLedgerGrouped(result, cur, today) {
           <span class="num" style="color:var(--ink2)">${fmtNum(c.amount,cur)}</span>
         </div>
         <div style="margin-top:1px">${escapeHtml(c.desc)}${c.isShared?' <span style="font-size:10px;color:var(--muted)">(all invoices)</span>':''}</div>
-      </div>`).join('') : `<div class="lg-empty">${t('noCosts')}</div>`;
+      </div>`).join('')
+      : (sharedInfo && !isAnchor ? sharedCostRefHtml(sharedInfo) : `<div class="lg-empty">${t('noCosts')}</div>`);
     const costFoot = costs.length ? `<div class="lg-foot">
         <div class="lg-foot-line"><span>${t('tblTotal')}</span><span class="num">${fmtNum(costTotal,cur)}</span></div>
         ${costPaid>0.001?`<div class="lg-foot-line" style="color:var(--muted)"><span>${t('lgPaid')}</span><span class="num">−${fmtNum(costPaid,cur)}</span></div>`:''}
@@ -5311,8 +5353,8 @@ function renderLedgerGrouped(result, cur, today) {
             <div class="lg-col-head">${t('lgStreams')}</div>
             ${streamsCol}
           </div>
-          <div class="lg-col">
-            <div class="lg-col-head">${t('costsFeesLabel')}</div>
+          <div class="lg-col"${isAnchor && sharedInfo ? ' id="shared-cost-anchor"' : ''}>
+            <div class="lg-col-head">${t('costsFeesLabel')}${isAnchor && sharedInfo ? ` <span class="lg-shared-chip">${t('sharedCostChip')}</span>` : ''}</div>
             ${costItems}${costFoot}
           </div>
           <div class="lg-col">
