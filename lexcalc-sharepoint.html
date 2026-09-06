@@ -2046,7 +2046,7 @@ const TRANSLATIONS = {
     contractualInterest:'Contractual Interest',
     penaltyPokuta:'Penalty / Pokuta', onOrigPrincipals:'on original principals',
     costsFeesLabel:'Costs & Fees', itemsOutstanding:'{n} item(s) outstanding',
-    sharedCostRef:'Shared costs ({names}) are listed on invoice {anchor}, allocated across this bundle of {n} invoices.', sharedCostChip:'shared',
+    sharedCostRef:'Shared costs ({names}) are listed on invoice {anchor}, allocated across this bundle of {n} invoices.', sharedCostChip:'shared', sharedCostJump:'Click to jump to invoice {anchor}',
     tabOverview:'Overview', tabLedger:'Full Ledger', tabAudit:'Audit Log', tabChart:'Chart', tabFlows:'Payment flows',
     ledgerViewChrono:'Chronological', ledgerViewGrouped:'By invoice', ledgerViewAcross:'Across invoices',
     lgStreams:'Interest accrual', lgAccrued:'Accrued', lgPaid:'Paid', lgOutstanding:'Outstanding', lgAllocated:'Allocated',
@@ -2175,7 +2175,7 @@ const TRANSLATIONS = {
     contractualInterest:'Zmluvný úrok',
     penaltyPokuta:'Zmluvná pokuta', onOrigPrincipals:'z pôvodných istín',
     costsFeesLabel:'Trovy a poplatky', itemsOutstanding:'{n} položka(iek) nezaplatená',
-    sharedCostRef:'Spoločné trovy ({names}) sú uvedené pri faktúre {anchor}, rozpočítané naprieč týmto balíkom {n} faktúr.', sharedCostChip:'spoločné',
+    sharedCostRef:'Spoločné trovy ({names}) sú uvedené pri faktúre {anchor}, rozpočítané naprieč týmto balíkom {n} faktúr.', sharedCostChip:'spoločné', sharedCostJump:'Kliknutím prejdete na faktúru {anchor}',
     tabOverview:'Prehľad', tabLedger:'Plný výkaz', tabAudit:'Audit log', tabChart:'Graf', tabFlows:'Toky platieb',
     ledgerViewChrono:'Chronologicky', ledgerViewGrouped:'Podľa faktúry', ledgerViewAcross:'Naprieč faktúrami',
     lgStreams:'Úročenie', lgAccrued:'Naakumulované', lgPaid:'Uhradené', lgOutstanding:'Nezaplatené', lgAllocated:'Alokované',
@@ -2304,7 +2304,7 @@ const TRANSLATIONS = {
     contractualInterest:'Smluvní úrok',
     penaltyPokuta:'Smluvní pokuta', onOrigPrincipals:'z původních jistin',
     costsFeesLabel:'Náklady a poplatky', itemsOutstanding:'{n} položka(ek) nezaplacena',
-    sharedCostRef:'Společné náklady ({names}) jsou uvedeny u faktury {anchor}, rozpočítané napříč tímto balíkem {n} faktur.', sharedCostChip:'společné',
+    sharedCostRef:'Společné náklady ({names}) jsou uvedeny u faktury {anchor}, rozpočítané napříč tímto balíkem {n} faktur.', sharedCostChip:'společné', sharedCostJump:'Kliknutím přejdete na fakturu {anchor}',
     tabOverview:'Přehled', tabLedger:'Plný výkaz', tabAudit:'Audit log', tabChart:'Graf', tabFlows:'Toky plateb',
     ledgerViewChrono:'Chronologicky', ledgerViewGrouped:'Podle faktury', ledgerViewAcross:'Napříč fakturami',
     lgStreams:'Úročení', lgAccrued:'Naakumulováno', lgPaid:'Uhrazeno', lgOutstanding:'Nezaplaceno', lgAllocated:'Alokováno',
@@ -4853,7 +4853,7 @@ function renderOutput(result, totals, cur, today, warnings) {
       ${totals.totCosts>0?`<div class="scard"><div class="scard-accent" style="background:var(--ink2)"></div>
         <div class="scard-lbl">${t('costsFeesLabel')}</div>
         <div class="scard-val" style="color:var(--ink2)">${fmtNum(totals.totCosts,cur)}</div>
-        <div class="scard-sub">${t('itemsOutstanding',{n:totals.allCosts.length})}</div></div>`:''}
+        <div class="scard-sub">${t('itemsOutstanding',{n:(()=>{let n=0;result.forEach((r,ri)=>{Object.values(r.unpaidCosts||{}).forEach(v=>{if(v>0.005)n++;});if(ri===0)Object.values(r.sharedUnpaidCosts||{}).forEach(v=>{if(v>0.005)n++;});});return n;})()})}</div></div>`:''}
     </div>
 
     <div class="tabs">
@@ -4927,8 +4927,11 @@ function renderOverviewTable(result, cur, today) {
   const ovCosts = buildEffectiveCosts(result, today, jur3, cur);
   function invOutstandingCosts(ri) {
     let sum=0;
+    // BUG-006: any cost scoped to this invoice (a flat fee OR an index-scoped
+    // court cost) is that invoice's outstanding cost; only scope 'all'
+    // (invIdx === null) is shared and shown on the first invoice.
     for (const c of ovCosts) {
-      if (c.id.startsWith('flat_') && c.invIdx===ri)
+      if (c.invIdx===ri)
         sum += result[ri]?.unpaidCosts?.[c.id] ?? c.amount;
     }
     if (ri===0) for (const c of ovCosts)
@@ -5190,17 +5193,24 @@ function sharedCostRefHtml(info) {
     .replace('{names}', names)
     .replace('{anchor}', escapeHtml(info.anchorRef))
     .replace('{n}', info.count);
-  return `<div class="lg-empty lg-shared-ref" onmouseenter="highlightSharedAnchor()" onmouseleave="clearSharedAnchor()">${txt}</div>`;
+  return `<div class="lg-empty lg-shared-ref" title="${escapeHtml(t('sharedCostJump').replace('{anchor}', info.anchorRef))}" onmouseenter="highlightSharedAnchor()" onmouseleave="clearSharedAnchor()" onclick="scrollToSharedAnchor()">${txt}</div>`;
 }
+// Hover: highlight the anchor cost card only (no scroll — accidental hover must
+// never move the viewport). Click: scroll it into view (and flash it briefly).
 function highlightSharedAnchor() {
   const el = document.getElementById('shared-cost-anchor');
-  if (!el) return;
-  el.style.outline = '2px solid var(--gold-bd)'; el.style.outlineOffset = '2px';
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (el) { el.style.outline = '2px solid var(--gold-bd)'; el.style.outlineOffset = '2px'; }
 }
 function clearSharedAnchor() {
   const el = document.getElementById('shared-cost-anchor');
   if (el) { el.style.outline = ''; el.style.outlineOffset = ''; }
+}
+function scrollToSharedAnchor() {
+  const el = document.getElementById('shared-cost-anchor');
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.style.outline = '2px solid var(--gold-bd)'; el.style.outlineOffset = '2px';
+  setTimeout(() => { el.style.outline = ''; el.style.outlineOffset = ''; }, 1600);
 }
 
 // Interest-accrual sub-table for one invoice (period rows only, with a
