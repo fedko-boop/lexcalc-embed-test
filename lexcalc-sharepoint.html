@@ -1692,9 +1692,13 @@ td.hl { color:var(--rich-black); font-weight:500; }
       </div>
       <div class="fg">
         <label data-i18n="targetInv">Target invoice (primary)</label>
-        <select id="payTargetInv">
+        <select id="payTargetInv" onchange="onPayTargetChange()">
           <option value="oldest" data-i18n="oldestFirst">Oldest invoice first (auto)</option>
         </select>
+      </div>
+      <div class="fg" id="paySubsetWrap" style="display:none">
+        <label style="font-size:11px;color:var(--ink3);margin-bottom:6px" data-i18n="subsetPick">Pay only these invoices (in this order), no spill to the rest:</label>
+        <div id="paySubsetList" style="display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:var(--r);padding:8px"></div>
       </div>
       <div class="fg">
         <label data-i18n="prioOrder">Priority order for this payment</label>
@@ -2038,6 +2042,7 @@ const TRANSLATIONS = {
     // Payment modal
     paymentDate:'Payment date', amount:'Amount',
     targetInv:'Target invoice (primary)', oldestFirst:'Oldest invoice first (auto)',
+    subsetOption:'Specific invoices only (subset)', subsetPick:'Pay only these invoices (in this order), no spill to the rest:', subsetTag:'(subset, no spill)', subsetEmpty:'Select at least one invoice for the subset.',
     prioOrder:'Priority order for this payment',
     useGlobalPrio:'Use global default priority', customPrio:'Custom priority for this payment',
     dragToSet:'Drag to set order for this payment:',
@@ -2171,6 +2176,7 @@ const TRANSLATIONS = {
     cancel:'Zrušiť', saveInvoice:'Uložiť faktúru',
     paymentDate:'Dátum platby', amount:'Suma',
     targetInv:'Cieľová faktúra (primárna)', oldestFirst:'Najstaršia faktúra ako prvá (auto)',
+    subsetOption:'Len vybrané faktúry (podmnožina)', subsetPick:'Uhradiť len tieto faktúry (v tomto poradí), bez presahu na ostatné:', subsetTag:'(podmnožina, bez presahu)', subsetEmpty:'Vyberte aspoň jednu faktúru do podmnožiny.',
     prioOrder:'Poradie pre túto platbu',
     useGlobalPrio:'Použiť globálne predvolené poradie', customPrio:'Vlastné poradie pre túto platbu',
     dragToSet:'Presuňte pre nastavenie poradia:',
@@ -2300,6 +2306,7 @@ const TRANSLATIONS = {
     cancel:'Zrušit', saveInvoice:'Uložit fakturu',
     paymentDate:'Datum platby', amount:'Částka',
     targetInv:'Cílová faktura (primární)', oldestFirst:'Nejstarší faktura jako první (auto)',
+    subsetOption:'Jen vybrané faktury (podmnožina)', subsetPick:'Uhradit jen tyto faktury (v tomto pořadí), bez přesahu na ostatní:', subsetTag:'(podmnožina, bez přesahu)', subsetEmpty:'Vyberte alespoň jednu fakturu do podmnožiny.',
     prioOrder:'Pořadí pro tuto platbu',
     useGlobalPrio:'Použít globální výchozí pořadí', customPrio:'Vlastní pořadí pro tuto platbu',
     dragToSet:'Přetažením nastavte pořadí:',
@@ -2409,6 +2416,36 @@ function setLang(lang) {
 // ============================================================
 function toDailyRate(val, unit, yd) { return LexCalcEngine.toDailyRate(val, unit, yd); }
 function buildEffectiveCosts(result, today, jur, cur) { return LexCalcEngine.buildEffectiveCosts(result, courtCosts, today, jur, invoices); }
+
+// ============================================================
+// Invoice references (BUG-007 / point 5): cost scope and payment targetInv name
+// an invoice by its stable id. 'all'/'oldest'/null/'' are special tokens; an
+// array (targetInv only) is a designated subset of ids. A legacy numeric index
+// (pre-id saved sessions / list data) is tolerated and migrated on load.
+// ============================================================
+function invById(id) { return invoices.find(v => String(v.id) === String(id)); }
+function refIsSpecial(r) { return r === null || r === undefined || r === '' || r === 'all' || r === 'oldest'; }
+// Display label for a single invoice reference (id, or legacy index): its ref/id.
+function refInvLabel(ref) {
+  const v = invById(ref) || (/^\d+$/.test(String(ref)) ? invoices[+ref] : null);
+  return v ? (v.ref || ('#' + v.id)) : '?';
+}
+// Migrate a legacy ARRAY-INDEX reference to an invoice id. Used only when loading
+// a pre-id session (_version < 7); specials and arrays pass through element-wise.
+function migrateRefToId(ref) {
+  if (refIsSpecial(ref)) return ref;
+  if (Array.isArray(ref)) return ref.map(migrateRefToId);
+  const n = +ref;
+  if (Number.isInteger(n) && n >= 0 && n < invoices.length) return invoices[n].id;
+  return ref;
+}
+// Resolve a reference to a KNOWN invoice id (accepts an id or a legacy index),
+// or null for specials/unknown. Used by buildEngineInput's enabled-check.
+function refToKnownId(ref) {
+  if (refIsSpecial(ref)) return null;
+  const v = invById(ref) || (/^\d+$/.test(String(ref)) ? invoices[+ref] : null);
+  return v ? String(v.id) : null;
+}
 
 // ============================================================
 // STATE
@@ -3323,7 +3360,14 @@ function openAddPaymentModal(idx=null) {
   // Populate target invoice dropdown
   const sel = document.getElementById('payTargetInv');
   sel.innerHTML = `<option value="oldest">${t('oldestFirst')}</option>` +
-    invoices.map((inv,i)=>`<option value="${i}">#${i+1} ${escapeHtml(inv.ref)}</option>`).join('');
+    `<option value="__subset__">${t('subsetOption')}</option>` +
+    invoices.map((inv,i)=>`<option value="${escapeHtml(String(inv.id))}">#${i+1} ${escapeHtml(inv.ref)}</option>`).join('');
+  // Build the subset checkbox list (used only when target = subset)
+  const subsetList = document.getElementById('paySubsetList');
+  subsetList.innerHTML = invoices.map((inv,i)=>
+    `<label style="display:flex;align-items:center;gap:8px;font-size:12px;font-family:'Noto Sans',sans-serif">
+      <input type="checkbox" class="pay-subset-cb" value="${escapeHtml(String(inv.id))}"> #${i+1} ${escapeHtml(inv.ref)}
+    </label>`).join('');
   // Reset custom prio
   customPrio = [...globalPrio];
   renderCustomPrio();
@@ -3333,7 +3377,13 @@ function openAddPaymentModal(idx=null) {
     const p = payments[idx];
     document.getElementById('payDate').value = p.date;
     document.getElementById('payAmount').value = p.amount;
-    document.getElementById('payTargetInv').value = p.targetInv;
+    if (Array.isArray(p.targetInv)) {
+      sel.value = '__subset__';
+      const set = new Set(p.targetInv.map(String));
+      subsetList.querySelectorAll('.pay-subset-cb').forEach(cb => { cb.checked = set.has(cb.value); });
+    } else {
+      sel.value = (p.targetInv === null || p.targetInv === undefined || p.targetInv === '') ? 'oldest' : String(p.targetInv);
+    }
     document.getElementById('payPrioMode').value = p.prioMode;
     document.getElementById('payNotes').value = p.notes||'';
     if (p.prioMode==='custom') {
@@ -3345,17 +3395,34 @@ function openAddPaymentModal(idx=null) {
     document.getElementById('payDate').value='';
     document.getElementById('payAmount').value='';
     document.getElementById('payNotes').value='';
+    sel.value = 'oldest';
   }
+  onPayTargetChange();
   openModal('paymentModal');
+}
+
+// Reveal the subset checkbox list only when the target mode is "subset".
+function onPayTargetChange() {
+  const sel = document.getElementById('payTargetInv');
+  document.getElementById('paySubsetWrap').style.display = (sel.value === '__subset__') ? '' : 'none';
 }
 
 function savePayment() {
   const date = document.getElementById('payDate').value;
   const amount = parseFloat(document.getElementById('payAmount').value);
-  const targetInv = document.getElementById('payTargetInv').value;
+  const rawTarget = document.getElementById('payTargetInv').value;
   const prioMode = document.getElementById('payPrioMode').value;
   const notes = document.getElementById('payNotes').value.trim();
   if (!date||isNaN(amount)||amount<=0) { alert('Please fill date and amount.'); return; }
+  // Resolve the target: 'oldest' | a single invoice id | an array of ids (subset).
+  let targetInv;
+  if (rawTarget === '__subset__') {
+    targetInv = Array.from(document.querySelectorAll('.pay-subset-cb'))
+      .filter(cb => cb.checked).map(cb => cb.value);
+    if (!targetInv.length) { alert(t('subsetEmpty')); return; }
+  } else {
+    targetInv = rawTarget; // 'oldest' or an invoice id
+  }
   const idx = document.getElementById('editPayIdx').value;
   const obj = { id:nextId++, date, amount, targetInv, prioMode,
     customPrio: prioMode==='custom' ? [...customPrio] : null, notes,
@@ -3377,7 +3444,7 @@ function removePayment(i) {
 function openRecurringModal() {
   const sel = document.getElementById('recTargetInv');
   sel.innerHTML = `<option value="oldest">Oldest first (global default)</option>` +
-    invoices.map((inv,i) => `<option value="${i}">#${i+1} ${escapeHtml(inv.ref)}</option>`).join('');
+    invoices.map((inv,i) => `<option value="${escapeHtml(String(inv.id))}">#${i+1} ${escapeHtml(inv.ref)}</option>`).join('');
   document.getElementById('recStartDate').value = '';
   document.getElementById('recAmount').value = '';
   document.getElementById('recInterval').value = 'monthly';
@@ -3462,7 +3529,11 @@ function renderPaymentList() {
       </div>
       <div class="pay-body">
         <div style="font-size:11px;color:var(--ink3);font-family:'Noto Sans',sans-serif;margin-bottom:8px">
-          Target: ${p.targetInv==='oldest'?t('oldestFirstShort'):escapeHtml(invoices[+p.targetInv]?.ref||'?')}<br>
+          Target: ${Array.isArray(p.targetInv)
+              ? escapeHtml(p.targetInv.map(refInvLabel).join(', ')) + ' ' + t('subsetTag')
+              : (p.targetInv==='oldest' || p.targetInv==null || p.targetInv==='')
+                ? t('oldestFirstShort')
+                : escapeHtml(refInvLabel(p.targetInv))}<br>
           Priority: ${p.prioMode==='custom'?t('customLabel')+' ('+escapeHtml(p.customPrio.join('→'))+')':t('globalDefault')}
           ${p.notes ? '<br>'+escapeHtml(p.notes) : ''}
         </div>
@@ -3512,7 +3583,7 @@ function openAddCostModal(idx=null) {
   // Populate scope dropdown
   const sel = document.getElementById('costScope');
   sel.innerHTML = `<option value="all">${t('wholeClaim')}</option>` +
-    invoices.map((inv,i)=>`<option value="${i}">#${i+1} ${escapeHtml(inv.ref)} only</option>`).join('');
+    invoices.map((inv,i)=>`<option value="${escapeHtml(String(inv.id))}">#${i+1} ${escapeHtml(inv.ref)} only</option>`).join('');
   if (idx!==null) {
     const c = courtCosts[idx];
     document.getElementById('costDesc').value = c.desc;
@@ -3564,7 +3635,7 @@ function renderCostList() {
       </label>
       <div style="flex:1">
         <div style="font-weight:500" class="${c.enabled === false ? 'item-ref-disabled' : ''}">${escapeHtml(c.desc)}</div>
-        <div style="font-family:'Noto Sans',sans-serif;font-size:10px;color:var(--ink3)">${fmtDate(c.date)} · ${fmtNum(c.amount,cur)} · ${c.scope==='all'?'all invoices':'#'+(+c.scope+1)+' '+escapeHtml(invoices[+c.scope]?.ref||'')}</div>
+        <div style="font-family:'Noto Sans',sans-serif;font-size:10px;color:var(--ink3)">${fmtDate(c.date)} · ${fmtNum(c.amount,cur)} · ${c.scope==='all'?'all invoices':escapeHtml(refInvLabel(c.scope))}</div>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="openAddCostModal(${i})" style="padding:3px 8px;font-size:11px">Edit</button>
       <button class="remove-x" onclick="removeCost(${i})">×</button>
@@ -3737,21 +3808,36 @@ function escapeHtml(s) {
 // ============================================================
 function buildEngineInput(today) {
   const toggleWarnings = [];
-  const activeInvoiceIndices = new Set(
-    invoices.map((inv, i) => inv.enabled !== false ? i : null).filter(i => i !== null)
-  );
+  const cur0 = document.getElementById('gCur').value;
+  // Enabled invoices by id. References are resolved by id (a legacy index is still
+  // accepted via refToKnownId) so disabled/unknown targets are caught here before
+  // the engine sees them.
+  const enabledIds = new Set(invoices.filter(v => v.enabled !== false).map(v => String(v.id)));
+  const isEnabledRef = (ref) => { const id = refToKnownId(ref); return id !== null && enabledIds.has(id); };
 
   const filteredPayments = payments
     .filter(p => p.enabled !== false)
     .map(p => {
       const copy = { ...p };
-      if (copy.targetInv !== null && copy.targetInv !== undefined &&
-          copy.targetInv !== 'oldest' && !activeInvoiceIndices.has(+copy.targetInv)) {
-        const cur = document.getElementById('gCur').value;
-        toggleWarnings.push(
-          `Payment ${fmtDate(copy.date)} (${fmtNum(copy.amount, cur)}): target invoice is disabled — falling back to global priority order.`
-        );
-        copy.targetInv = null;
+      if (Array.isArray(copy.targetInv)) {
+        // Designated subset: keep the enabled, known targets (normalised to ids).
+        const kept = copy.targetInv.filter(isEnabledRef).map(refToKnownId);
+        if (kept.length !== copy.targetInv.length) {
+          toggleWarnings.push(
+            `Payment ${fmtDate(copy.date)} (${fmtNum(copy.amount, cur0)}): some target invoices are disabled or unknown — applying to the remaining ${kept.length} in the set.`
+          );
+        }
+        copy.targetInv = kept.length ? kept : null; // empty subset → global order
+      } else if (copy.targetInv !== null && copy.targetInv !== undefined &&
+                 copy.targetInv !== '' && copy.targetInv !== 'oldest') {
+        if (!isEnabledRef(copy.targetInv)) {
+          toggleWarnings.push(
+            `Payment ${fmtDate(copy.date)} (${fmtNum(copy.amount, cur0)}): target invoice is disabled — falling back to global priority order.`
+          );
+          copy.targetInv = null;
+        } else {
+          copy.targetInv = refToKnownId(copy.targetInv); // normalise to id
+        }
       }
       return copy;
     });
@@ -3759,14 +3845,18 @@ function buildEngineInput(today) {
   const filteredCosts = courtCosts
     .filter(c => c.enabled !== false)
     .filter(c => {
-      if (c.scope !== 'all' && !activeInvoiceIndices.has(+c.scope)) {
-        const cur = document.getElementById('gCur').value;
+      if (c.scope !== 'all' && !isEnabledRef(c.scope)) {
         toggleWarnings.push(
           `Cost "${escapeHtml(c.desc)}": scoped to a disabled invoice — excluded from this calculation.`
         );
         return false;
       }
       return true;
+    })
+    .map(c => {
+      const copy = { ...c };
+      if (copy.scope !== 'all') copy.scope = refToKnownId(copy.scope) || copy.scope; // normalise to id
+      return copy;
     });
 
   return {
@@ -5796,7 +5886,7 @@ function restoreCalculatorState(c) {
 // same shape elsewhere — keep this the single source of the session schema.
 function collectSession() {
   return {
-    _version: 6,
+    _version: 7,
     _saved: new Date().toISOString(),
     caseRef:  caseRef,
     claimant: claimant,
@@ -5850,6 +5940,15 @@ function applySession(s) {
   payments   = s.payments   || [];
   courtCosts = s.courtCosts || [];
   penalties  = s.penalties  || [];
+
+  // Migrate legacy index-based references to invoice ids (BUG-007 / point 5).
+  // Sessions before _version 7 stored payment.targetInv and cost.scope as array
+  // indices; convert them now that invoices[] is loaded. The engine tolerates
+  // legacy indices at calc time, so this only hardens the stored data.
+  if ((s._version || 0) < 7) {
+    payments.forEach(p => { p.targetInv = migrateRefToId(p.targetInv); });
+    courtCosts.forEach(c => { c.scope = migrateRefToId(c.scope); });
+  }
   globalPrio = s.globalPrio || ['costs','stat','contr','pen','principal'];
   nextId     = s.nextId     || 100;
   skRegime   = s.skRegime   || 1;
