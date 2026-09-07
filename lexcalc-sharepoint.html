@@ -1807,7 +1807,25 @@ td.hl { color:var(--rich-black); font-weight:500; }
     if (unit === 'pd') return val / 100;
     return 0;
   }
-  function buildEffectiveCosts(result, courtCosts, today, jur) {
+  // NOTE: this is a client-side DISPLAY-ONLY reimplementation (the secret engine
+  // is server-side). It MUST mirror lexcalc-engine.js resolveInvIndex /
+  // buildEffectiveCosts so the Overview table attributes id-scoped costs to the
+  // right invoice row (BUG-006 / BUG-007). Keep the two in sync.
+  function resolveInvIndex(ref, result, invArr) {
+    if (ref === null || ref === undefined || ref === '') return -1;
+    var s = String(ref), i;
+    for (i = 0; i < result.length; i++) if (String(result[i].inv.id) === s) return i;
+    if (invArr && invArr.length) {
+      var orig = null;
+      for (i = 0; i < invArr.length; i++) if (String(invArr[i].id) === s) { orig = invArr[i]; break; }
+      if (!orig && /^d+$/.test(s)) { var n = +s; if (n >= 0 && n < invArr.length) orig = invArr[n]; }
+      if (orig) { for (i = 0; i < result.length; i++) if (result[i].inv.id === orig.id) return i; return -1; }
+      return -1;
+    }
+    if (/^d+$/.test(s)) { var m = +s; if (m >= 0 && m < result.length) return m; }
+    return -1;
+  }
+  function buildEffectiveCosts(result, courtCosts, today, jur, invArr) {
     var costs = [];
     for (var i = 0; i < result.length; i++) {
       var inv = result[i].inv;
@@ -1819,8 +1837,11 @@ td.hl { color:var(--rich-black); font-weight:500; }
     for (var j = 0; j < courtCosts.length; j++) {
       var c = courtCosts[j];
       if (c.date > today) continue;
-      if (c.scope === 'all') costs.push({ id: 'cost_' + c.id, desc: c.desc, amount: c.amount, date: c.date, invIdx: null });
-      else costs.push({ id: 'cost_' + c.id, desc: c.desc, amount: c.amount, date: c.date, invIdx: +c.scope });
+      if (c.scope === 'all') { costs.push({ id: 'cost_' + c.id, desc: c.desc, amount: c.amount, date: c.date, invIdx: null }); }
+      else {
+        var idx = resolveInvIndex(c.scope, result, invArr);
+        costs.push({ id: 'cost_' + c.id, desc: c.desc, amount: c.amount, date: c.date, invIdx: idx >= 0 ? idx : null, scopeRef: c.scope, unresolved: idx < 0 });
+      }
     }
     return costs.sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
   }
@@ -2387,7 +2408,7 @@ function setLang(lang) {
 // Thin wrappers kept for render functions that call these directly
 // ============================================================
 function toDailyRate(val, unit, yd) { return LexCalcEngine.toDailyRate(val, unit, yd); }
-function buildEffectiveCosts(result, today, jur, cur) { return LexCalcEngine.buildEffectiveCosts(result, courtCosts, today, jur); }
+function buildEffectiveCosts(result, today, jur, cur) { return LexCalcEngine.buildEffectiveCosts(result, courtCosts, today, jur, invoices); }
 
 // ============================================================
 // STATE
