@@ -1094,6 +1094,7 @@ td.hl { color:var(--rich-black); font-weight:500; }
       <span data-i18n="invoicesTitle">Principals / Invoices</span>
       <span style="display:flex;gap:6px;align-items:center">
         <button class="btn btn-ghost btn-sm" onclick="openImportModal()" data-i18n="importBtn" title="Import invoices from CSV, Excel or PDF">⇪ Import</button>
+        <button class="btn btn-ghost btn-sm" onclick="openGroupsModal()" data-i18n="groupsBtn" title="Manage invoice groups (shared settings and payment allocation within this claim)">⊞ Groups</button>
         <button class="btn btn-ghost btn-sm" onclick="openAddInvoiceModal()" data-i18n="add">+ Add</button>
       </span>
     </div>
@@ -1691,6 +1692,38 @@ td.hl { color:var(--rich-black); font-weight:500; }
         </div>
       </div>
       <div class="fg">
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3);cursor:pointer">
+          <input type="checkbox" id="payFxEnabled" onchange="onPayFxToggle()"> <span data-i18n="fxPaidOther">Paid in another currency (record the conversion)</span>
+        </label>
+      </div>
+      <div id="payFxWrap" style="display:none;border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px;background:var(--paper-warm)">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div class="fg" style="flex:1;min-width:90px;margin:0">
+            <label style="font-size:11px" data-i18n="fxCurrency">Paid currency</label>
+            <input type="text" id="payFxCcy" placeholder="RON" maxlength="3" style="text-transform:uppercase" oninput="recomputeFxAmount()">
+          </div>
+          <div class="fg" style="flex:1;min-width:110px;margin:0">
+            <label style="font-size:11px" data-i18n="fxOrigAmount">Amount paid (that currency)</label>
+            <input type="number" id="payFxOrig" placeholder="0.00" step="0.01" oninput="recomputeFxAmount()">
+          </div>
+          <div class="fg" style="flex:1;min-width:110px;margin:0">
+            <label style="font-size:11px" data-i18n="fxRate">Rate to claim currency</label>
+            <input type="number" id="payFxRate" placeholder="0.000000" step="0.000001" oninput="recomputeFxAmount()">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <div class="fg" style="flex:1;min-width:110px;margin:0">
+            <label style="font-size:11px" data-i18n="fxRateDate">Rate date</label>
+            <input type="date" id="payFxDate">
+          </div>
+          <div class="fg" style="flex:2;min-width:140px;margin:0">
+            <label style="font-size:11px" data-i18n="fxSource">Rate source</label>
+            <input type="text" id="payFxSource" placeholder="ČNB / ECB / bank statement" data-i18n-ph="fxSourcePh">
+          </div>
+        </div>
+        <div id="payFxComputed" style="font-size:11px;color:var(--ink3);font-family:'Noto Sans',sans-serif;margin-top:8px"></div>
+      </div>
+      <div class="fg">
         <label data-i18n="targetInv">Target invoice (primary)</label>
         <select id="payTargetInv" onchange="onPayTargetChange()">
           <option value="oldest" data-i18n="oldestFirst">Oldest invoice first (auto)</option>
@@ -1710,6 +1743,14 @@ td.hl { color:var(--rich-black); font-weight:500; }
       <div id="customPrioWrap" style="display:none">
         <label style="display:block;font-size:11px;color:var(--ink3);margin-bottom:6px" data-i18n="dragToSet">Drag to set order for this payment:</label>
         <div class="priority-list" id="customPrioList"></div>
+      </div>
+      <div class="fg">
+        <label data-i18n="surplusLabel">If the payment exceeds what the target owes</label>
+        <select id="paySurplus">
+          <option value="overflow-to-oldest" data-i18n="surplusOverflow">Apply surplus to the oldest unpaid invoice (default)</option>
+          <option value="unallocated" data-i18n="surplusUnalloc">Leave surplus unallocated (only the target invoices)</option>
+          <option value="deposit" data-i18n="surplusDeposit">Hold surplus as a deposit / credit</option>
+        </select>
       </div>
       <div class="fg">
         <label data-i18n="notes2">Notes</label>
@@ -2043,6 +2084,9 @@ const TRANSLATIONS = {
     paymentDate:'Payment date', amount:'Amount',
     targetInv:'Target invoice (primary)', oldestFirst:'Oldest invoice first (auto)',
     subsetOption:'Specific invoices only (subset)', subsetPick:'Pay only these invoices (in this order), no spill to the rest:', subsetTag:'(subset, no spill)', subsetEmpty:'Select at least one invoice for the subset.',
+    fxPaidOther:'Paid in another currency (record the conversion)', fxCurrency:'Paid currency', fxOrigAmount:'Amount paid (that currency)', fxRate:'Rate to claim currency', fxRateDate:'Rate date', fxSource:'Rate source', fxSourcePh:'ČNB / ECB / bank statement', fxIncomplete:'Fill currency, amount, rate, rate date and source.', fxDateAfter:'The rate date cannot be after the payment date.', auditFxConv:'Converted',
+    surplusLabel:'If the payment exceeds what the target owes', surplusOverflow:'Apply surplus to the oldest unpaid invoice (default)', surplusUnalloc:'Leave surplus unallocated (only the target invoices)', surplusDeposit:'Hold surplus as a deposit / credit', surplusTag:'Surplus', surplusUnallocShort:'left unallocated', surplusDepositShort:'held as deposit',
+    groupsBtn:'⊞ Groups', groupsTitle:'Invoice groups', groupsIntro:'Groups share settings and payment behaviour among invoices within this one claim (one proceeding). An invoice belongs to at most one group.', groupsNone:'No groups yet.', groupAdd:'+ Add group', groupTitle:'Group name', groupTitlePh:'e.g. Contract A', groupContrRate:'Shared contractual rate (optional)', groupContrUnit:'Unit', groupSurplus:'Default surplus handling for payments targeting this group', groupSurplusInherit:'Inherit claim default (overflow to oldest)', groupMembers:'Invoices in this group', groupMembersCount:'invoice(s)', groupNoInvoices:'Add invoices first.', groupSave:'Save group', done:'Done', cancel4:'Cancel', editBtn:'Edit', groupTag:'group', payTargetGroup:'Group',
     prioOrder:'Priority order for this payment',
     useGlobalPrio:'Use global default priority', customPrio:'Custom priority for this payment',
     dragToSet:'Drag to set order for this payment:',
@@ -2177,6 +2221,9 @@ const TRANSLATIONS = {
     paymentDate:'Dátum platby', amount:'Suma',
     targetInv:'Cieľová faktúra (primárna)', oldestFirst:'Najstaršia faktúra ako prvá (auto)',
     subsetOption:'Len vybrané faktúry (podmnožina)', subsetPick:'Uhradiť len tieto faktúry (v tomto poradí), bez presahu na ostatné:', subsetTag:'(podmnožina, bez presahu)', subsetEmpty:'Vyberte aspoň jednu faktúru do podmnožiny.',
+    fxPaidOther:'Uhradené v inej mene (zaznamenať prepočet)', fxCurrency:'Mena úhrady', fxOrigAmount:'Uhradená suma (v tej mene)', fxRate:'Kurz na menu pohľadávky', fxRateDate:'Dátum kurzu', fxSource:'Zdroj kurzu', fxSourcePh:'NBS / ECB / výpis z účtu', fxIncomplete:'Vyplňte menu, sumu, kurz, dátum kurzu a zdroj.', fxDateAfter:'Dátum kurzu nemôže byť po dátume úhrady.', auditFxConv:'Prepočet',
+    surplusLabel:'Ak platba prevyšuje dlh cieľa', surplusOverflow:'Preplatok použiť na najstaršiu neuhradenú faktúru (predvolené)', surplusUnalloc:'Preplatok ponechať nerozúčtovaný (len cieľové faktúry)', surplusDeposit:'Preplatok podržať ako depozit / kredit', surplusTag:'Preplatok', surplusUnallocShort:'ponechaný nerozúčtovaný', surplusDepositShort:'podržaný ako depozit',
+    groupsBtn:'⊞ Skupiny', groupsTitle:'Skupiny faktúr', groupsIntro:'Skupiny zdieľajú nastavenia a správanie platieb medzi faktúrami v rámci jedného konania. Faktúra patrí najviac do jednej skupiny.', groupsNone:'Zatiaľ žiadne skupiny.', groupAdd:'+ Pridať skupinu', groupTitle:'Názov skupiny', groupTitlePh:'napr. Zmluva A', groupContrRate:'Zdieľaná zmluvná sadzba (voliteľné)', groupContrUnit:'Jednotka', groupSurplus:'Predvolené zaobchádzanie s preplatkom pre platby cielené na túto skupinu', groupSurplusInherit:'Zdediť predvolené (preplatok na najstaršiu)', groupMembers:'Faktúry v tejto skupine', groupMembersCount:'faktúr', groupNoInvoices:'Najprv pridajte faktúry.', groupSave:'Uložiť skupinu', done:'Hotovo', cancel4:'Zrušiť', editBtn:'Upraviť', groupTag:'skupina', payTargetGroup:'Skupina',
     prioOrder:'Poradie pre túto platbu',
     useGlobalPrio:'Použiť globálne predvolené poradie', customPrio:'Vlastné poradie pre túto platbu',
     dragToSet:'Presuňte pre nastavenie poradia:',
@@ -2307,6 +2354,9 @@ const TRANSLATIONS = {
     paymentDate:'Datum platby', amount:'Částka',
     targetInv:'Cílová faktura (primární)', oldestFirst:'Nejstarší faktura jako první (auto)',
     subsetOption:'Jen vybrané faktury (podmnožina)', subsetPick:'Uhradit jen tyto faktury (v tomto pořadí), bez přesahu na ostatní:', subsetTag:'(podmnožina, bez přesahu)', subsetEmpty:'Vyberte alespoň jednu fakturu do podmnožiny.',
+    fxPaidOther:'Uhrazeno v jiné měně (zaznamenat přepočet)', fxCurrency:'Měna úhrady', fxOrigAmount:'Uhrazená částka (v té měně)', fxRate:'Kurz na měnu pohledávky', fxRateDate:'Datum kurzu', fxSource:'Zdroj kurzu', fxSourcePh:'ČNB / ECB / výpis z účtu', fxIncomplete:'Vyplňte měnu, částku, kurz, datum kurzu a zdroj.', fxDateAfter:'Datum kurzu nemůže být po datu úhrady.', auditFxConv:'Přepočet',
+    surplusLabel:'Pokud platba převyšuje dluh cíle', surplusOverflow:'Přeplatek použít na nejstarší neuhrazenou fakturu (výchozí)', surplusUnalloc:'Přeplatek ponechat nerozúčtovaný (jen cílové faktury)', surplusDeposit:'Přeplatek podržet jako depozit / kredit', surplusTag:'Přeplatek', surplusUnallocShort:'ponechán nerozúčtovaný', surplusDepositShort:'podržen jako depozit',
+    groupsBtn:'⊞ Skupiny', groupsTitle:'Skupiny faktur', groupsIntro:'Skupiny sdílejí nastavení a chování plateb mezi fakturami v rámci jednoho řízení. Faktura patří nejvýše do jedné skupiny.', groupsNone:'Zatím žádné skupiny.', groupAdd:'+ Přidat skupinu', groupTitle:'Název skupiny', groupTitlePh:'např. Smlouva A', groupContrRate:'Sdílená smluvní sazba (volitelné)', groupContrUnit:'Jednotka', groupSurplus:'Výchozí zacházení s přeplatkem pro platby cílené na tuto skupinu', groupSurplusInherit:'Zdědit výchozí (přeplatek na nejstarší)', groupMembers:'Faktury v této skupině', groupMembersCount:'faktur', groupNoInvoices:'Nejprve přidejte faktury.', groupSave:'Uložit skupinu', done:'Hotovo', cancel4:'Zrušit', editBtn:'Upravit', groupTag:'skupina', payTargetGroup:'Skupina',
     prioOrder:'Pořadí pro tuto platbu',
     useGlobalPrio:'Použít globální výchozí pořadí', customPrio:'Vlastní pořadí pro tuto platbu',
     dragToSet:'Přetažením nastavte pořadí:',
@@ -2456,6 +2506,9 @@ let streams = { stat: false, contr: false, pen: false };
 let skRegime = 1; // 1 or 2
 let globalPrio = ['costs','stat','contr','pen','principal'];
 let courtCosts = []; // {id, desc, amount, date, scope:'all'|invIdx}
+// Flat invoice groups (GROUPS-ARCHITECTURE): each {id, title, settings:{overlay by
+// invoice-field names}, remainderPolicy?}. Membership is invoice.groupId (one parent).
+let invoiceGroups = [];
 // Global penalty list (separately-collectable penalties tied to an invoice by invId).
 // Each entry: {id, invId, enabled, label, kind:'fixed'|'percent',
 //   fixed:   fixedMode:'oneoff'|'periodic', amount, date?, everyUnit?, start?, end?, stopWhenPaid?
@@ -3326,6 +3379,7 @@ function renderInvoiceList() {
         </label>
         <span class="invoice-num">#${i+1}</span>
         <span class="invoice-title ${inv.enabled === false ? 'item-ref-disabled' : ''}">${escapeHtml(inv.ref)}</span>
+        ${inv.groupId != null && groupById2(inv.groupId) ? `<span class="tag t-stat" style="font-size:9px" title="${t('groupTag')}">⊞ ${escapeHtml(groupById2(inv.groupId).title || t('groupTag'))}</span>` : ''}
         ${dupSet.has(i)?badge('#B87514', t('dupBadge'), t('dupBadgeTitle'), i):''}
         ${partySet.has(i)?badge('var(--red)', t(partyFlagReason[i]==='creditor'?'creditorBadge':partyFlagReason[i]==='both'?'partyBadgeBoth':'partyBadge'), t('partyBadgeTitle'), i):''}
         <span class="invoice-amount">${fmtNum(inv.principal,cur)}</span>
@@ -3361,6 +3415,7 @@ function openAddPaymentModal(idx=null) {
   const sel = document.getElementById('payTargetInv');
   sel.innerHTML = `<option value="oldest">${t('oldestFirst')}</option>` +
     `<option value="__subset__">${t('subsetOption')}</option>` +
+    invoiceGroups.map(g=>`<option value="__group__${escapeHtml(String(g.id))}">${t('payTargetGroup')}: ${escapeHtml(g.title||('#'+g.id))}</option>`).join('') +
     invoices.map((inv,i)=>`<option value="${escapeHtml(String(inv.id))}">#${i+1} ${escapeHtml(inv.ref)}</option>`).join('');
   // Build the subset checkbox list (used only when target = subset)
   const subsetList = document.getElementById('paySubsetList');
@@ -3377,7 +3432,9 @@ function openAddPaymentModal(idx=null) {
     const p = payments[idx];
     document.getElementById('payDate').value = p.date;
     document.getElementById('payAmount').value = p.amount;
-    if (Array.isArray(p.targetInv)) {
+    if (p.target && p.target.kind === 'group') {
+      sel.value = '__group__' + p.target.id;
+    } else if (Array.isArray(p.targetInv)) {
       sel.value = '__subset__';
       const set = new Set(p.targetInv.map(String));
       subsetList.querySelectorAll('.pay-subset-cb').forEach(cb => { cb.checked = set.has(cb.value); });
@@ -3391,12 +3448,29 @@ function openAddPaymentModal(idx=null) {
       renderCustomPrio();
       document.getElementById('customPrioWrap').style.display='';
     }
+    // FX provenance
+    if (p.fx) {
+      document.getElementById('payFxEnabled').checked = true;
+      document.getElementById('payFxCcy').value = p.fx.origCcy || '';
+      document.getElementById('payFxOrig').value = p.fx.origAmount ?? '';
+      document.getElementById('payFxRate').value = p.fx.rate ?? '';
+      document.getElementById('payFxDate').value = p.fx.rateDate || '';
+      document.getElementById('payFxSource').value = p.fx.source || '';
+    } else {
+      document.getElementById('payFxEnabled').checked = false;
+      ['payFxCcy','payFxOrig','payFxRate','payFxDate','payFxSource'].forEach(id => document.getElementById(id).value = '');
+    }
+    document.getElementById('paySurplus').value = p.remainderPolicy || 'overflow-to-oldest';
   } else {
     document.getElementById('payDate').value='';
     document.getElementById('payAmount').value='';
     document.getElementById('payNotes').value='';
     sel.value = 'oldest';
+    document.getElementById('payFxEnabled').checked = false;
+    ['payFxCcy','payFxOrig','payFxRate','payFxDate','payFxSource'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('paySurplus').value = 'overflow-to-oldest';
   }
+  onPayFxToggle();
   onPayTargetChange();
   openModal('paymentModal');
 }
@@ -3407,6 +3481,33 @@ function onPayTargetChange() {
   document.getElementById('paySubsetWrap').style.display = (sel.value === '__subset__') ? '' : 'none';
 }
 
+// ---- Multicurrency provenance (FX phase 1) ----
+// When a payment was made in another currency, the operator records the original
+// amount, the rate to the claim currency, the rate date and the source. The claim-
+// currency Amount is then computed from origAmount × rate and locked, so the stored
+// number and its provenance always agree (and the audit can show the conversion).
+function onPayFxToggle() {
+  const on = document.getElementById('payFxEnabled').checked;
+  document.getElementById('payFxWrap').style.display = on ? '' : 'none';
+  document.getElementById('payAmount').readOnly = on;
+  if (on) recomputeFxAmount(); else document.getElementById('payFxComputed').textContent = '';
+}
+function recomputeFxAmount() {
+  if (!document.getElementById('payFxEnabled').checked) return;
+  const ccy = (document.getElementById('payFxCcy').value || '').trim().toUpperCase();
+  const orig = parseFloat(document.getElementById('payFxOrig').value);
+  const rate = parseFloat(document.getElementById('payFxRate').value);
+  const note = document.getElementById('payFxComputed');
+  if (!isNaN(orig) && !isNaN(rate) && rate > 0) {
+    const amt = Math.round(orig * rate * 100) / 100;
+    document.getElementById('payAmount').value = amt;
+    const claimCcy = document.getElementById('gCur').value;
+    note.textContent = `${fmtNum(orig, ccy || '')} ${ccy} × ${rate} = ${fmtNum(amt, claimCcy)}`;
+  } else {
+    note.textContent = '';
+  }
+}
+
 function savePayment() {
   const date = document.getElementById('payDate').value;
   const amount = parseFloat(document.getElementById('payAmount').value);
@@ -3414,18 +3515,37 @@ function savePayment() {
   const prioMode = document.getElementById('payPrioMode').value;
   const notes = document.getElementById('payNotes').value.trim();
   if (!date||isNaN(amount)||amount<=0) { alert('Please fill date and amount.'); return; }
-  // Resolve the target: 'oldest' | a single invoice id | an array of ids (subset).
-  let targetInv;
+  // Resolve the target: 'oldest' | a single invoice id | an array of ids (subset)
+  // | a typed group target { kind:'group', id }.
+  let targetInv = null, target = null;
   if (rawTarget === '__subset__') {
     targetInv = Array.from(document.querySelectorAll('.pay-subset-cb'))
       .filter(cb => cb.checked).map(cb => cb.value);
     if (!targetInv.length) { alert(t('subsetEmpty')); return; }
+  } else if (rawTarget.indexOf('__group__') === 0) {
+    target = { kind: 'group', id: rawTarget.slice('__group__'.length) };
   } else {
     targetInv = rawTarget; // 'oldest' or an invoice id
   }
+  // FX provenance (optional): a payment made in another currency.
+  let fx = null;
+  if (document.getElementById('payFxEnabled').checked) {
+    const origCcy = (document.getElementById('payFxCcy').value || '').trim().toUpperCase();
+    const origAmount = parseFloat(document.getElementById('payFxOrig').value);
+    const rate = parseFloat(document.getElementById('payFxRate').value);
+    const rateDate = document.getElementById('payFxDate').value;
+    const source = document.getElementById('payFxSource').value.trim();
+    if (!origCcy || isNaN(origAmount) || origAmount <= 0 || isNaN(rate) || rate <= 0 || !rateDate || !source) {
+      alert(t('fxIncomplete')); return;
+    }
+    if (rateDate > date) { alert(t('fxDateAfter')); return; }
+    fx = { origCcy, origAmount, rate, rateDate, source };
+  }
+  const surplus = document.getElementById('paySurplus').value;
+  const remainderPolicy = (surplus && surplus !== 'overflow-to-oldest') ? surplus : null; // default omitted
   const idx = document.getElementById('editPayIdx').value;
-  const obj = { id:nextId++, date, amount, targetInv, prioMode,
-    customPrio: prioMode==='custom' ? [...customPrio] : null, notes,
+  const obj = { id:nextId++, date, amount, targetInv, target, prioMode,
+    customPrio: prioMode==='custom' ? [...customPrio] : null, notes, fx, remainderPolicy,
     enabled: idx==='' ? true : payments[+idx].enabled !== false };
   if (idx==='') payments.push(obj);
   else payments[+idx] = obj;
@@ -3529,12 +3649,16 @@ function renderPaymentList() {
       </div>
       <div class="pay-body">
         <div style="font-size:11px;color:var(--ink3);font-family:'Noto Sans',sans-serif;margin-bottom:8px">
-          Target: ${Array.isArray(p.targetInv)
+          Target: ${(p.target && p.target.kind==='group')
+              ? t('payTargetGroup')+': '+escapeHtml((groupById2(p.target.id)||{}).title || String(p.target.id))
+              : Array.isArray(p.targetInv)
               ? escapeHtml(p.targetInv.map(refInvLabel).join(', ')) + ' ' + t('subsetTag')
               : (p.targetInv==='oldest' || p.targetInv==null || p.targetInv==='')
                 ? t('oldestFirstShort')
                 : escapeHtml(refInvLabel(p.targetInv))}<br>
           Priority: ${p.prioMode==='custom'?t('customLabel')+' ('+escapeHtml(p.customPrio.join('→'))+')':t('globalDefault')}
+          ${p.fx ? `<br><span style="color:var(--ink2)">${escapeHtml(fmtNum(p.fx.origAmount, p.fx.origCcy)+' '+p.fx.origCcy)} × ${escapeHtml(String(p.fx.rate))} (${escapeHtml(p.fx.source)}, ${escapeHtml(fmtDate(p.fx.rateDate))})</span>` : ''}
+          ${p.remainderPolicy && p.remainderPolicy !== 'overflow-to-oldest' ? `<br><span style="color:var(--madder)">${t('surplusTag')}: ${p.remainderPolicy === 'deposit' ? t('surplusDepositShort') : t('surplusUnallocShort')}</span>` : ''}
           ${p.notes ? '<br>'+escapeHtml(p.notes) : ''}
         </div>
         <div style="display:flex;gap:6px">
@@ -3640,6 +3764,105 @@ function renderCostList() {
       <button class="btn btn-ghost btn-sm" onclick="openAddCostModal(${i})" style="padding:3px 8px;font-size:11px">Edit</button>
       <button class="remove-x" onclick="removeCost(${i})">×</button>
     </div>`).join('');
+}
+
+// ============================================================
+// INVOICE GROUPS (flat, within one claim). Each group carries a partial settings
+// overlay (invoice-field names the engine's resolveClaimSettings accepts) + an
+// optional default remainderPolicy. Membership is invoice.groupId (one parent).
+// ============================================================
+function groupById2(id) { return invoiceGroups.find(g => String(g.id) === String(id)); }
+
+function openGroupsModal() {
+  showGroupsListView();
+  renderGroupsList();
+  openModal('groupsModal');
+}
+function showGroupsListView() {
+  document.getElementById('groupsListView').style.display = '';
+  document.getElementById('groupEditView').style.display = 'none';
+  document.getElementById('groupsListFooter').style.display = '';
+  document.getElementById('groupEditFooter').style.display = 'none';
+}
+function showGroupEditView() {
+  document.getElementById('groupsListView').style.display = 'none';
+  document.getElementById('groupEditView').style.display = '';
+  document.getElementById('groupsListFooter').style.display = 'none';
+  document.getElementById('groupEditFooter').style.display = 'flex';
+}
+function renderGroupsList() {
+  const list = document.getElementById('groupsList');
+  if (!invoiceGroups.length) {
+    list.innerHTML = `<div style="font-size:12px;color:var(--ink4);font-style:italic;padding:8px 0">${t('groupsNone')}</div>`;
+    return;
+  }
+  list.innerHTML = invoiceGroups.map((g, i) => {
+    const members = invoices.filter(v => String(v.groupId) === String(g.id));
+    const rate = g.settings && g.settings.invContrRateVal ? ` · ${escapeHtml(String(g.settings.invContrRateVal))}% ${escapeHtml(g.settings.invContrRateUnit || 'pa')}` : '';
+    const pol = g.remainderPolicy ? ` · ${escapeHtml(g.remainderPolicy)}` : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-bottom:6px;font-size:12px">
+      <div style="flex:1">
+        <div style="font-weight:600">${escapeHtml(g.title || ('Group ' + (i + 1)))}</div>
+        <div style="font-family:'Noto Sans',sans-serif;font-size:10px;color:var(--ink3)">${members.length} ${t('groupMembersCount')}${rate}${pol}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="openGroupEditor(${i})" style="padding:3px 8px;font-size:11px">${t('editBtn')||'Edit'}</button>
+      <button class="remove-x" onclick="removeGroup(${i})">×</button>
+    </div>`;
+  }).join('');
+}
+function openGroupEditor(idx) {
+  document.getElementById('editGroupIdx').value = idx === null ? '' : idx;
+  const g = idx === null ? null : invoiceGroups[idx];
+  document.getElementById('grpTitle').value = g ? (g.title || '') : '';
+  document.getElementById('grpContrRate').value = g && g.settings && g.settings.invContrRateVal != null ? g.settings.invContrRateVal : '';
+  document.getElementById('grpContrUnit').value = g && g.settings && g.settings.invContrRateUnit ? g.settings.invContrRateUnit : 'pa';
+  document.getElementById('grpSurplus').value = g && g.remainderPolicy ? g.remainderPolicy : '';
+  // Member checkboxes: an invoice is checkable here; checking assigns it to THIS
+  // group (and, being a single parent, removes it from any other group on save).
+  const gid = g ? String(g.id) : null;
+  document.getElementById('grpMembers').innerHTML = invoices.length
+    ? invoices.map((inv, i) => {
+        const other = inv.groupId != null && String(inv.groupId) !== String(gid) ? groupById2(inv.groupId) : null;
+        const otherLbl = other ? ` <span style="color:var(--ink4)">(${escapeHtml(other.title || 'group')})</span>` : '';
+        return `<label style="display:flex;align-items:center;gap:8px;font-size:12px;font-family:'Noto Sans',sans-serif">
+          <input type="checkbox" class="grp-member-cb" value="${escapeHtml(String(inv.id))}" ${String(inv.groupId) === String(gid) ? 'checked' : ''}>
+          ${escapeHtml(inv.ref || ('#' + (i + 1)))}${otherLbl}
+        </label>`;
+      }).join('')
+    : `<div style="font-size:11px;color:var(--ink4)">${t('groupNoInvoices')}</div>`;
+  showGroupEditView();
+}
+function cancelGroupEditor() { showGroupsListView(); }
+function saveGroup() {
+  const idx = document.getElementById('editGroupIdx').value;
+  const title = document.getElementById('grpTitle').value.trim() || ('Group ' + (invoiceGroups.length + 1));
+  const rateVal = parseFloat(document.getElementById('grpContrRate').value);
+  const unit = document.getElementById('grpContrUnit').value;
+  const surplus = document.getElementById('grpSurplus').value;
+  const settings = {};
+  if (!isNaN(rateVal)) { settings.invContrRateVal = rateVal; settings.invContrRateUnit = unit; }
+  const id = idx === '' ? nextId++ : invoiceGroups[+idx].id;
+  const obj = { id, title, settings, remainderPolicy: surplus || null };
+  if (idx === '') invoiceGroups.push(obj); else invoiceGroups[+idx] = obj;
+  // Apply membership from the checkboxes: assign checked invoices to this group,
+  // and clear this group from any invoice that is no longer checked (single parent).
+  const checked = new Set(Array.from(document.querySelectorAll('.grp-member-cb')).filter(cb => cb.checked).map(cb => cb.value));
+  invoices.forEach(inv => {
+    if (checked.has(String(inv.id))) inv.groupId = id;
+    else if (String(inv.groupId) === String(id)) inv.groupId = null;
+  });
+  showGroupsListView();
+  renderGroupsList();
+  renderInvoiceList();
+  calculate();
+}
+function removeGroup(i) {
+  const g = invoiceGroups[i];
+  invoices.forEach(inv => { if (String(inv.groupId) === String(g.id)) inv.groupId = null; });
+  invoiceGroups.splice(i, 1);
+  renderGroupsList();
+  renderInvoiceList();
+  calculate();
 }
 
 // ============================================================
@@ -3878,6 +4101,7 @@ function buildEngineInput(today) {
     },
     globalPrio: [...globalPrio],
     invoices:   invoices.filter(inv => inv.enabled !== false).map(inv => ({...inv})),
+    invoiceGroups: invoiceGroups.length ? invoiceGroups.map(g => ({ ...g, settings: { ...(g.settings || {}) } })) : undefined,
     payments:   filteredPayments,
     courtCosts: filteredCosts,
     penalties:  penalties.filter(p => p.enabled !== false).map(p => ({...p})),
@@ -4536,6 +4760,7 @@ function renderAuditLog(result, cur, today) {
             <span class="audit-step-title">${t('auditPayment')}: <span class="audit-formula">${fmtDate(p.date)} — ${auditFmt(p.amount,cur)}</span> ${t('auditReceived')}</span>
           </div>
           <div class="audit-formula-block">
+            ${p.fx ? `<div style="font-size:12px;color:var(--ink2);margin-bottom:4px">${t('auditFxConv')||'Converted'}: <span class="audit-formula">${escapeHtml(fmtNum(p.fx.origAmount,p.fx.origCcy)+' '+p.fx.origCcy)} × ${escapeHtml(String(p.fx.rate))} = ${auditFmt(p.amount,cur)}</span> <span class="audit-annotation">(${escapeHtml(p.fx.source)}, ${escapeHtml(fmtDate(p.fx.rateDate))})</span></div>` : ''}
             ${p.carriedFromPrev > 0.001 ? `<div style="font-size:12px;color:var(--muted);margin-bottom:4px">${t('auditConsumedBy') || 'Consumed by'} ${fmtInvRef(p.carriedFromInvRef, p.carriedFromInvId)}: <span class="audit-formula">${auditFmt(p.carriedFromPrev,cur)}</span> · ${t('auditAppliedHere')}: <span class="audit-formula">${auditFmt(p.allocatedAmount,cur)}</span></div>` : ''}
             <div style="margin-bottom:4px;color:var(--muted);font-size:12px">${t('auditAllocation')}</div>
             ${(()=>{
@@ -4550,12 +4775,11 @@ function renderAuditLog(result, cur, today) {
               if (a.principal>0) allocLines.push(`${t('auditPrincipal2')}: −${auditFmt(displayAllocPrincipal(p),cur)}`);
               return allocLines.map((line,i)=>`<div>${i+1}. ${line}</div>`).join('');
             })()}
-            ${(p.amount - p.allocatedAmount) > 0.001 && p.carriedFromPrev < 0.001
-    ? `<div style="color:var(--ink3)">${t('auditUnalloc')}: ${auditFmt(p.amount - p.allocatedAmount, cur)} ${
-        p.carriedToInvId
-          ? `${t('auditCarriedTo') || 'carried to'} ${fmtInvRef(p.carriedToInvRef, p.carriedToInvId)}`
-          : `(${t('auditOverpayment') || 'overpayment, not allocated'})`
-      }</div>`
+            ${p.carriedToInvId != null && (p.amount - p.carriedFromPrev - p.allocatedAmount) > 0.001
+    ? `<div style="color:var(--ink3)">${t('auditUnalloc')}: ${auditFmt(p.amount - p.carriedFromPrev - p.allocatedAmount, cur)} ${t('auditCarriedTo') || 'carried to'} ${fmtInvRef(p.carriedToInvRef, p.carriedToInvId)}</div>`
+    : ''}
+            ${(p.carriedToInvId === null || p.carriedToInvId === undefined) && p.remaining > 0.001
+    ? `<div style="color:var(--accent);font-weight:500">${t('auditOverpayment') || 'overpayment, not allocated'}: ${auditFmt(p.remaining, cur)}</div>`
     : ''}
           </div>
           <div class="audit-totals-bar">
@@ -5242,12 +5466,18 @@ function paymentCarryNotes(p, cur) {
   if (p.carriedFromPrev > 0.001) {
     out += `<div style="font-size:10px;color:var(--muted);margin-top:2px">${t('auditConsumedBy')||'Consumed by'} ${fmtInvRef(p.carriedFromInvRef, p.carriedFromInvId)}: ${fmtNum(p.carriedFromPrev,cur)} · ${t('auditAppliedHere')||'applied here'}: ${fmtNum(p.allocatedAmount,cur)}</div>`;
   }
-  if ((p.amount - p.allocatedAmount) > 0.001 && p.carriedFromPrev < 0.001) {
-    out += `<div style="font-size:10px;color:var(--muted);margin-top:2px">${
-      p.carriedToInvId
-        ? `${t('auditCarriedTo')||'Carried to'} ${fmtInvRef(p.carriedToInvRef, p.carriedToInvId)}: ${fmtNum(p.amount - p.allocatedAmount, cur)}`
-        : `${t('auditOverpayment')||'Overpayment, not allocated'}: ${fmtNum(p.amount - p.allocatedAmount, cur)}`
-    }</div>`;
+  // Amount that flowed onward to the next invoice in the chain (correct for any
+  // position: amount available here minus what this invoice took).
+  const onward = p.amount - (p.carriedFromPrev || 0) - (p.allocatedAmount || 0);
+  if (p.carriedToInvId != null && onward > 0.001) {
+    out += `<div style="font-size:10px;color:var(--muted);margin-top:2px">${t('auditCarriedTo')||'Carried to'} ${fmtInvRef(p.carriedToInvRef, p.carriedToInvId)}: ${fmtNum(onward, cur)}</div>`;
+  }
+  // Final unallocated remainder (overpayment) on the last invoice in the chain —
+  // p.remaining is the payment's leftover after every allocation. Previously this
+  // was hidden whenever the last invoice had received a carry (e.g. a subset
+  // payment), so the surplus vanished from view. Now always surfaced.
+  if ((p.carriedToInvId === null || p.carriedToInvId === undefined) && p.remaining > 0.001) {
+    out += `<div style="font-size:10px;color:var(--accent);font-weight:500;margin-top:2px">${t('auditOverpayment')||'Overpayment, not allocated'}: ${fmtNum(p.remaining, cur)}</div>`;
   }
   return out;
 }
@@ -5911,6 +6141,7 @@ function collectSession() {
     penBase:       document.getElementById('penBase').value,
     globalPrio: globalPrio,
     invoices: invoices,
+    invoiceGroups: invoiceGroups,
     payments: payments,
     courtCosts: courtCosts,
     penalties: penalties,
@@ -5937,6 +6168,7 @@ function applySession(s) {
 
   // Restore global state
   invoices   = s.invoices   || [];
+  invoiceGroups = s.invoiceGroups || [];
   payments   = s.payments   || [];
   courtCosts = s.courtCosts || [];
   penalties  = s.penalties  || [];
@@ -7077,6 +7309,61 @@ document.addEventListener('DOMContentLoaded', initLexCalc);
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('costModal')" data-i18n="cancel3">Cancel</button>
       <button class="btn btn-primary" onclick="saveCost()" data-i18n="saveCost">Save Cost</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="groupsModal">
+  <div class="modal" style="width:520px">
+    <div class="modal-header">
+      <div class="modal-title" data-i18n="groupsTitle">Invoice groups</div>
+      <button class="remove-x" onclick="closeModal('groupsModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:11px;color:var(--ink3);font-family:'Noto Sans',sans-serif;margin:0 0 10px" data-i18n="groupsIntro">Groups share settings and payment behaviour among invoices within this one claim (one proceeding). An invoice belongs to at most one group.</p>
+      <!-- LIST VIEW -->
+      <div id="groupsListView">
+        <div id="groupsList"></div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openGroupEditor(null)" data-i18n="groupAdd">+ Add group</button>
+      </div>
+      <!-- EDIT VIEW -->
+      <div id="groupEditView" style="display:none">
+        <input type="hidden" id="editGroupIdx" value="">
+        <div class="fg">
+          <label data-i18n="groupTitle">Group name</label>
+          <input type="text" id="grpTitle" placeholder="e.g. Contract A" data-i18n-ph="groupTitlePh">
+        </div>
+        <div class="fr">
+          <div class="fg">
+            <label data-i18n="groupContrRate">Shared contractual rate (optional)</label>
+            <input type="number" id="grpContrRate" placeholder="e.g. 12" step="0.01">
+          </div>
+          <div class="fg">
+            <label data-i18n="groupContrUnit">Unit</label>
+            <select id="grpContrUnit"><option value="pa">% p.a.</option><option value="pm">% p.m.</option><option value="pd">% p.d.</option></select>
+          </div>
+        </div>
+        <div class="fg">
+          <label data-i18n="groupSurplus">Default surplus handling for payments targeting this group</label>
+          <select id="grpSurplus">
+            <option value="" data-i18n="groupSurplusInherit">Inherit claim default (overflow to oldest)</option>
+            <option value="overflow-to-oldest" data-i18n="surplusOverflow">Apply surplus to the oldest unpaid invoice</option>
+            <option value="unallocated" data-i18n="surplusUnalloc">Leave surplus unallocated</option>
+            <option value="deposit" data-i18n="surplusDeposit">Hold surplus as a deposit / credit</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label data-i18n="groupMembers">Invoices in this group</label>
+          <div id="grpMembers" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:var(--r);padding:8px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span id="groupsListFooter"><button class="btn btn-primary" onclick="closeModal('groupsModal')" data-i18n="done">Done</button></span>
+      <span id="groupEditFooter" style="display:none;gap:8px">
+        <button class="btn btn-ghost" onclick="cancelGroupEditor()" data-i18n="cancel4">Cancel</button>
+        <button class="btn btn-primary" onclick="saveGroup()" data-i18n="groupSave">Save group</button>
+      </span>
     </div>
   </div>
 </div>
